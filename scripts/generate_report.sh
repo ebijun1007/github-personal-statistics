@@ -36,13 +36,27 @@ STATS=$(gh api graphql -f query='
     daily: user(login: $owner) {
       contributionsCollection(from: $dailyFrom) {
         totalCommitContributions
-        totalLinesChanged
+        commitContributionsByRepository {
+          repository {
+            name
+          }
+          contributions {
+            totalCount
+          }
+        }
       }
     }
     monthly: user(login: $owner) {
       contributionsCollection(from: $monthStart) {
         totalCommitContributions
-        totalLinesChanged
+        commitContributionsByRepository {
+          repository {
+            name
+          }
+          contributions {
+            totalCount
+          }
+        }
       }
     }
   }
@@ -62,8 +76,12 @@ if ! echo "$STATS" | jq -e '.data.monthly.contributionsCollection' >/dev/null; t
 fi
 
 # 統計データの抽出
-DAILY_CHANGES=$(echo "$STATS" | jq '.data.daily.contributionsCollection.totalLinesChanged')
-MONTHLY_CHANGES=$(echo "$STATS" | jq '.data.monthly.contributionsCollection.totalLinesChanged')
+DAILY_COMMITS=$(echo "$STATS" | jq '.data.daily.contributionsCollection.totalCommitContributions')
+MONTHLY_COMMITS=$(echo "$STATS" | jq '.data.monthly.contributionsCollection.totalCommitContributions')
+
+# コミット数を変更行数の近似値として使用 (1コミットあたり平均20行の変更と仮定)
+DAILY_CHANGES=$((DAILY_COMMITS * 20))
+MONTHLY_CHANGES=$((MONTHLY_COMMITS * 20))
 
 # PR統計の取得
 echo "Fetching PR statistics..."
@@ -126,14 +144,14 @@ PAYLOAD=$(cat <<EOF
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "*Today's Activity*\n• Code Changes: ${DAILY_CHANGES} lines\n• PRs Created: ${DAILY_PRS_CREATED}\n• PRs Merged: ${DAILY_PRS_MERGED}"
+        "text": "*Today's Activity*\n• Commits: ${DAILY_COMMITS} (≈${DAILY_CHANGES} lines)\n• PRs Created: ${DAILY_PRS_CREATED}\n• PRs Merged: ${DAILY_PRS_MERGED}"
       }
     },
     {
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "*Monthly Progress*\n• Code Changes: ${MONTHLY_CHANGES}/${MONTHLY_CODE_CHANGES_GOAL} (${CHANGES_PROGRESS}%)\n• PRs Created: ${MONTHLY_PRS_CREATED}/${MONTHLY_PR_CREATION_GOAL} (${PR_CREATION_PROGRESS}%)\n• PRs Merged: ${MONTHLY_PRS_MERGED}/${MONTHLY_PR_MERGE_GOAL} (${PR_MERGE_PROGRESS}%)"
+        "text": "*Monthly Progress*\n• Commits: ${MONTHLY_COMMITS} (≈${MONTHLY_CHANGES}/${MONTHLY_CODE_CHANGES_GOAL} lines, ${CHANGES_PROGRESS}%)\n• PRs Created: ${MONTHLY_PRS_CREATED}/${MONTHLY_PR_CREATION_GOAL} (${PR_CREATION_PROGRESS}%)\n• PRs Merged: ${MONTHLY_PRS_MERGED}/${MONTHLY_PR_MERGE_GOAL} (${PR_MERGE_PROGRESS}%)"
       }
     },
     {
