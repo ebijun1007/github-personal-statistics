@@ -17,6 +17,19 @@ for var in "GITHUB_TOKEN" "SLACK_WEBHOOK_URL" "USERNAME"; do
     log "Confirmed $var is set"
 done
 
+# リポジトリ情報の設定
+REPO_OWNER="${REPO_OWNER:-$USERNAME}"
+REPO_NAME="${REPO_NAME:-github-personal-statistics}"
+
+# リポジトリ環境変数の確認
+for var in "REPO_OWNER" "REPO_NAME"; do
+    if [ -z "${!var}" ]; then
+        log "Error: $var is not set"
+        exit 1
+    fi
+    log "Confirmed $var is set"
+done
+
 # 月間目標値の確認
 for goal in "MONTHLY_CODE_CHANGES_GOAL" "MONTHLY_PR_CREATION_GOAL" "MONTHLY_PR_MERGE_GOAL"; do
     if [ -z "${!goal}" ]; then
@@ -153,9 +166,9 @@ log "Change counts validated"
 log "Fetching PR statistics..."
 # 全リポジトリのPR情報を取得
 PR_QUERY=$(gh api graphql -f query='
-  query($owner: String!) {
-    user(login: $owner) {
-      pullRequests(first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
+  query($repoOwner: String!, $repoName: String!) {
+    repository(owner: $repoOwner, name: $repoName) {
+      pullRequests(first: 100, states: [OPEN, CLOSED, MERGED], orderBy: {field: CREATED_AT, direction: DESC}) {
         nodes {
           createdAt
           mergedAt
@@ -164,16 +177,16 @@ PR_QUERY=$(gh api graphql -f query='
       }
     }
   }
-' -f owner="$USERNAME")
+' -f repoOwner="$REPO_OWNER" -f repoName="$REPO_NAME")
 
 log "Raw PR Query Response:"
 echo "$PR_QUERY" | jq '.'
 
 # PRの統計を計算
-DAILY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
-DAILY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
-MONTHLY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
-MONTHLY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
+DAILY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.repository.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
+DAILY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.repository.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
+MONTHLY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.repository.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
+MONTHLY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.repository.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
 
 log "PR Statistics:"
 log "- Daily PRs Created: $DAILY_PRS_CREATED"
