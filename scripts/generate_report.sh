@@ -144,4 +144,22 @@ EOF
 
 # Slackに通知を送信
 echo "Sending notification to Slack..."
-curl -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
+
+if [ "${DEBUG:-false}" = "true" ]; then
+    echo "Debug: Slack payload"
+    echo "$PAYLOAD" | jq '.'
+fi
+
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+    -H 'Content-type: application/json' \
+    --data "$PAYLOAD" "$SLACK_WEBHOOK_URL")
+HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+
+if [ "$HTTP_STATUS" -ne 200 ]; then
+    echo "Error: Failed to send Slack notification (HTTP $HTTP_STATUS)"
+    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Response body: $RESPONSE_BODY"
+    exit 1
+fi
+
+[ "${DEBUG:-false}" = "true" ] && echo "Debug: Successfully sent notification to Slack"
