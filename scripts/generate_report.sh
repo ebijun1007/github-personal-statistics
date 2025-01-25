@@ -97,7 +97,7 @@ calculate_changes() {
     local json=$1
     local period=$2
     local since=$3
-    local result=$(echo "$json" | jq --arg since "$since" --arg period "$period" '
+    local result=$(echo "$json" | jq --raw-output --arg since "$since" --arg period "$period" '
         [.data[$period].contributionsCollection.commitContributionsByRepository[] |
         select(.repository.defaultBranchRef != null) |
         .repository.defaultBranchRef.target.history.nodes[] |
@@ -109,7 +109,12 @@ calculate_changes() {
     echo "$result"
 }
 
-# コミット数の計測は除外
+# 計算結果の検証
+if ! [[ "$DAILY_CHANGES" =~ ^[0-9]+$ ]]; then
+    log "Error: Invalid daily changes value: $DAILY_CHANGES"
+    log "Debugging DAILY_CHANGES value: $DAILY_CHANGES"
+    exit 1
+fi
 
 # 実際の変更行数を計算
 DAILY_CHANGES=$(calculate_changes "$STATS" "daily" "$FROM_DATE")
