@@ -135,7 +135,7 @@ echo "Fetching PR statistics..."
 
 # 全リポジトリのPR情報を取得
 PR_QUERY=$(gh api graphql -f query='
-  query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
+  query($owner: String!) {
     user(login: $owner) {
       pullRequests(first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
         nodes {
@@ -146,7 +146,7 @@ PR_QUERY=$(gh api graphql -f query='
       }
     }
   }
-' -f owner="$USERNAME" -f dailyFrom="$FROM_DATE" -f monthStart="$MONTH_START")
+' -f owner="$USERNAME")
 
 # PRの統計を計算
 DAILY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
