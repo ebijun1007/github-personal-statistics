@@ -12,12 +12,12 @@ env:
   MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
   MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
   MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
-  GITHUB_USERNAME: ${{ vars.GITHUB_USERNAME }}
+  USERNAME: ${{ vars.USERNAME }}
 
 jobs:
   report:
     # 個人の活動のみを対象とする
-    if: github.actor == vars.GITHUB_USERNAME
+    if: github.actor == vars.USERNAME
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

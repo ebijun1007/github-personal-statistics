@@ -3,7 +3,7 @@
 set -e
 
 # 環境変数の確認
-if [ -z "$GITHUB_TOKEN" ] || [ -z "$SLACK_WEBHOOK_URL" ] || [ -z "$GITHUB_USERNAME" ]; then
+if [ -z "$GITHUB_TOKEN" ] || [ -z "$SLACK_WEBHOOK_URL" ] || [ -z "$USERNAME" ]; then
     echo "Required environment variables are not set"
     exit 1
 fi
@@ -26,7 +26,7 @@ COMMIT_STATS=$(gh api graphql -f query="
       }
     }
   }
-" -f owner="$GITHUB_USERNAME" -f from="$FROM_DATE")
+" -f owner="$USERNAME" -f from="$FROM_DATE")
 
 # 24時間以内の変更行数を取得
 DAILY_CHANGES=$(echo "$COMMIT_STATS" | jq '.data.user.contributionsCollection.totalLinesChanged')
@@ -41,7 +41,7 @@ MONTHLY_STATS=$(gh api graphql -f query="
       }
     }
   }
-" -f owner="$GITHUB_USERNAME" -f from="$MONTH_START")
+" -f owner="$USERNAME" -f from="$MONTH_START")
 
 MONTHLY_CHANGES=$(echo "$MONTHLY_STATS" | jq '.data.user.contributionsCollection.totalLinesChanged')
 
