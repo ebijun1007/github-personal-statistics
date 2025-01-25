@@ -1,8 +1,13 @@
 name: GitHub Activity Report
+
 on:
-  schedule:
-    - cron: '0 21-11 * * *'
-  workflow_dispatch:
+ schedule:
+   - cron: '0 21-23,0-11 * * *'  # UTC 21-11 = JST 6-20
+ push:
+   branches: [ main, master ]
+ pull_request:
+   types: [ opened, closed ]
+ workflow_dispatch:
 
 env:
   MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
