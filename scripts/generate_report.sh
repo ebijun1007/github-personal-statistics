@@ -31,33 +31,39 @@ MONTH_START=$(date -d "$(date +%Y-%m-01)" -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # コミット統計の取得
 echo "Fetching commit statistics..."
-COMMIT_STATS=$(gh api graphql -f query="
-  query(\$owner: String!, \$from: DateTime!) {
-    user(login: \$owner) {
-      contributionsCollection(from: \$from) {
+STATS=$(gh api graphql -f query='
+  query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
+    daily: user(login: $owner) {
+      contributionsCollection(from: $dailyFrom) {
+        totalCommitContributions
+        totalLinesChanged
+      }
+    }
+    monthly: user(login: $owner) {
+      contributionsCollection(from: $monthStart) {
         totalCommitContributions
         totalLinesChanged
       }
     }
   }
-" -f owner="$USERNAME" -f from="$FROM_DATE")
+' -f owner="$USERNAME" -f dailyFrom="$FROM_DATE" -f monthStart="$MONTH_START")
 
-# 24時間以内の変更行数を取得
-DAILY_CHANGES=$(echo "$COMMIT_STATS" | jq '.data.user.contributionsCollection.totalLinesChanged')
+# APIレスポンスの検証
+if ! echo "$STATS" | jq -e '.data.daily.contributionsCollection' >/dev/null; then
+    echo "Error: Invalid daily stats response"
+    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Response: $STATS"
+    exit 1
+fi
 
-# 月初めからの統計を取得
-MONTHLY_STATS=$(gh api graphql -f query="
-  query(\$owner: String!, \$from: DateTime!) {
-    user(login: \$owner) {
-      contributionsCollection(from: \$from) {
-        totalCommitContributions
-        totalLinesChanged
-      }
-    }
-  }
-" -f owner="$USERNAME" -f from="$MONTH_START")
+if ! echo "$STATS" | jq -e '.data.monthly.contributionsCollection' >/dev/null; then
+    echo "Error: Invalid monthly stats response"
+    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Response: $STATS"
+    exit 1
+fi
 
-MONTHLY_CHANGES=$(echo "$MONTHLY_STATS" | jq '.data.user.contributionsCollection.totalLinesChanged')
+# 統計データの抽出
+DAILY_CHANGES=$(echo "$STATS" | jq '.data.daily.contributionsCollection.totalLinesChanged')
+MONTHLY_CHANGES=$(echo "$STATS" | jq '.data.monthly.contributionsCollection.totalLinesChanged')
 
 # PR統計の取得
 echo "Fetching PR statistics..."
