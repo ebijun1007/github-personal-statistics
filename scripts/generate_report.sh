@@ -2,35 +2,46 @@
 
 set -e
 
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+log "Starting GitHub Activity Report script"
+
 # 環境変数の確認
 for var in "GITHUB_TOKEN" "SLACK_WEBHOOK_URL" "USERNAME"; do
     if [ -z "${!var}" ]; then
-        echo "Error: $var is not set"
+        log "Error: $var is not set"
         exit 1
     fi
+    log "Confirmed $var is set"
 done
 
 # 月間目標値の確認
 for goal in "MONTHLY_CODE_CHANGES_GOAL" "MONTHLY_PR_CREATION_GOAL" "MONTHLY_PR_MERGE_GOAL"; do
     if [ -z "${!goal}" ]; then
-        echo "Error: $goal is not set"
+        log "Error: $goal is not set"
         exit 1
     fi
     if ! [[ "${!goal}" =~ ^[1-9][0-9]*$ ]]; then
-        echo "Error: $goal must be a positive integer"
+        log "Error: $goal must be a positive integer"
         exit 1
     fi
+    log "$goal is set to ${!goal}"
 done
 
 # 過去24時間の期間を設定
 FROM_DATE=$(date -d '24 hours ago' -u +"%Y-%m-%dT%H:%M:%SZ")
 CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-# 月初めの日付を設定
 MONTH_START=$(date -d "$(date +%Y-%m-01)" -u +"%Y-%m-%dT%H:%M:%SZ")
 
+log "Time ranges:"
+log "- From: $FROM_DATE"
+log "- Current: $CURRENT_DATE"
+log "- Month Start: $MONTH_START"
+
 # コミット統計の取得
-echo "Fetching commit statistics..."
+log "Fetching commit statistics..."
 STATS=$(gh api graphql -f query='
   query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
     daily: user(login: $owner) {
@@ -82,37 +93,46 @@ STATS=$(gh api graphql -f query='
   }
 ' -f owner="$USERNAME" -f dailyFrom="$FROM_DATE" -f monthStart="$MONTH_START")
 
+log "Raw GitHub API Response:"
+echo "$STATS" | jq '.'
+
 # APIレスポンスの検証
 if ! echo "$STATS" | jq -e '.data.daily.contributionsCollection' >/dev/null; then
-    echo "Error: Invalid daily stats response"
-    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Response: $STATS"
+    log "Error: Invalid daily stats response"
     exit 1
 fi
+log "Daily stats validation passed"
 
 if ! echo "$STATS" | jq -e '.data.monthly.contributionsCollection' >/dev/null; then
-    echo "Error: Invalid monthly stats response"
-    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Response: $STATS"
+    log "Error: Invalid monthly stats response"
     exit 1
 fi
+log "Monthly stats validation passed"
 
 # 変更行数の計算関数
 calculate_changes() {
     local json=$1
     local period=$2
     local since=$3
-    echo "$json" | jq --arg since "$since" --arg period "$period" '
+    local result=$(echo "$json" | jq --arg since "$since" --arg period "$period" '
         [.data[$period].contributionsCollection.commitContributionsByRepository[] |
         select(.repository.defaultBranchRef != null) |
         .repository.defaultBranchRef.target.history.nodes[] |
         select(.committedDate >= $since) |
         (.additions + .deletions)] |
         add // 0
-    '
+    ')
+    log "Calculated changes for $period since $since: $result"
+    echo "$result"
 }
 
 # 統計データの抽出
 DAILY_COMMITS=$(echo "$STATS" | jq '.data.daily.contributionsCollection.totalCommitContributions')
 MONTHLY_COMMITS=$(echo "$STATS" | jq '.data.monthly.contributionsCollection.totalCommitContributions')
+
+log "Commit counts:"
+log "- Daily commits: $DAILY_COMMITS"
+log "- Monthly commits: $MONTHLY_COMMITS"
 
 # 実際の変更行数を計算
 DAILY_CHANGES=$(calculate_changes "$STATS" "daily" "$FROM_DATE")
@@ -120,19 +140,18 @@ MONTHLY_CHANGES=$(calculate_changes "$STATS" "monthly" "$MONTH_START")
 
 # 数値の検証
 if ! [[ "$DAILY_CHANGES" =~ ^[0-9]+$ ]]; then
-    echo "Error: Invalid daily changes value"
-    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Daily changes: $DAILY_CHANGES"
+    log "Error: Invalid daily changes value: $DAILY_CHANGES"
     exit 1
 fi
 
 if ! [[ "$MONTHLY_CHANGES" =~ ^[0-9]+$ ]]; then
-    echo "Error: Invalid monthly changes value"
-    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Monthly changes: $MONTHLY_CHANGES"
+    log "Error: Invalid monthly changes value: $MONTHLY_CHANGES"
     exit 1
 fi
 
-echo "Fetching PR statistics..."
+log "Change counts validated"
 
+log "Fetching PR statistics..."
 # 全リポジトリのPR情報を取得
 PR_QUERY=$(gh api graphql -f query='
   query($owner: String!) {
@@ -148,27 +167,39 @@ PR_QUERY=$(gh api graphql -f query='
   }
 ' -f owner="$USERNAME")
 
+log "Raw PR Query Response:"
+echo "$PR_QUERY" | jq '.'
+
 # PRの統計を計算
 DAILY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
 DAILY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
 MONTHLY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
 MONTHLY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
 
+log "PR Statistics:"
+log "- Daily PRs Created: $DAILY_PRS_CREATED"
+log "- Daily PRs Merged: $DAILY_PRS_MERGED"
+log "- Monthly PRs Created: $MONTHLY_PRS_CREATED"
+log "- Monthly PRs Merged: $MONTHLY_PRS_MERGED"
+
 # bcコマンドの確認
 if ! command -v bc &> /dev/null; then
-    echo "Error: bc command not found"
+    log "Error: bc command not found"
     exit 1
 fi
+log "bc command available"
 
 # 進捗率計算用の関数
 calculate_progress() {
     local current=$1
     local goal=$2
     if [ "$goal" -eq 0 ]; then
-        echo "Error: monthly goal cannot be zero"
+        log "Error: monthly goal cannot be zero"
         exit 1
     fi
-    printf "%.2f" "$(echo "scale=2; $current * 100 / $goal" | bc)"
+    local progress=$(printf "%.2f" "$(echo "scale=2; $current * 100 / $goal" | bc)")
+    log "Progress calculation: $current / $goal = $progress%"
+    echo "$progress"
 }
 
 # 月間目標に対する進捗率の計算
@@ -181,7 +212,13 @@ DAYS_IN_MONTH=$(date -d "$(date +%Y-%m-01) +1 month -1 day" +%d)
 CURRENT_DAY=$(date +%d)
 REMAINING_DAYS=$((DAYS_IN_MONTH - CURRENT_DAY + 1))
 
+log "Time calculations:"
+log "- Days in month: $DAYS_IN_MONTH"
+log "- Current day: $CURRENT_DAY"
+log "- Remaining days: $REMAINING_DAYS"
+
 # Slack通知用のJSONペイロードを作成
+log "Creating Slack payload..."
 PAYLOAD=$(jq -n \
   --arg daily_commits "$DAILY_COMMITS" \
   --arg daily_changes "$DAILY_CHANGES" \
@@ -230,13 +267,11 @@ PAYLOAD=$(jq -n \
     ]
   }')
 
-# Slackに通知を送信
-echo "Sending notification to Slack..."
+log "Slack payload:"
+echo "$PAYLOAD" | jq '.'
 
-if [ "${DEBUG:-false}" = "true" ]; then
-    echo "Debug: Slack payload"
-    echo "$PAYLOAD" | jq '.'
-fi
+# Slackに通知を送信
+log "Sending notification to Slack..."
 
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     -H 'Content-type: application/json' \
@@ -244,10 +279,13 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
 HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
 RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
 
+log "Slack API Response:"
+log "- Status Code: $HTTP_STATUS"
+log "- Response Body: $RESPONSE_BODY"
+
 if [ "$HTTP_STATUS" -ne 200 ]; then
-    echo "Error: Failed to send Slack notification (HTTP $HTTP_STATUS)"
-    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Response body: $RESPONSE_BODY"
+    log "Error: Failed to send Slack notification (HTTP $HTTP_STATUS)"
     exit 1
 fi
 
-[ "${DEBUG:-false}" = "true" ] && echo "Debug: Successfully sent notification to Slack"
+log "Successfully completed GitHub Activity Report"
