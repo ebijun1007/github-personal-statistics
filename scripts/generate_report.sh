@@ -3,7 +3,7 @@
 set -e
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" 1>&2
 }
 
 log "Starting GitHub Activity Report script"
