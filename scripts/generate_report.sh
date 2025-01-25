@@ -3,10 +3,24 @@
 set -e
 
 # 環境変数の確認
-if [ -z "$GITHUB_TOKEN" ] || [ -z "$SLACK_WEBHOOK_URL" ] || [ -z "$USERNAME" ]; then
-    echo "Required environment variables are not set"
-    exit 1
-fi
+for var in "GITHUB_TOKEN" "SLACK_WEBHOOK_URL" "USERNAME"; do
+    if [ -z "${!var}" ]; then
+        echo "Error: $var is not set"
+        exit 1
+    fi
+done
+
+# 月間目標値の確認
+for goal in "MONTHLY_CODE_CHANGES_GOAL" "MONTHLY_PR_CREATION_GOAL" "MONTHLY_PR_MERGE_GOAL"; do
+    if [ -z "${!goal}" ]; then
+        echo "Error: $goal is not set"
+        exit 1
+    fi
+    if ! [[ "${!goal}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: $goal must be a positive integer"
+        exit 1
+    fi
+done
 
 # 過去24時間の期間を設定
 FROM_DATE=$(date -d '24 hours ago' -u +"%Y-%m-%dT%H:%M:%SZ")
