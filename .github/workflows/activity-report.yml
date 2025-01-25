@@ -1,0 +1,38 @@
+name: GitHub Activity Report
+
+on:
+  # 個人のリポジトリ活動を検知
+  push:
+    branches: [ main, master ]
+  pull_request:
+    types: [ opened, closed ]
+  workflow_dispatch:      # 手動実行用
+
+env:
+  MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
+  MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
+  MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
+  GITHUB_USERNAME: ${{ vars.GITHUB_USERNAME }}
+
+jobs:
+  report:
+    # 個人の活動のみを対象とする
+    if: github.actor == vars.GITHUB_USERNAME
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup GitHub CLI
+        run: |
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+      
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      
+      - name: Generate Activity Report
+        run: |
+          chmod +x ./scripts/generate_report.sh
+          ./scripts/generate_report.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
