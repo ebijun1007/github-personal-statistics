@@ -109,7 +109,6 @@ if ! echo "$STATS" | jq -e '.data.monthly.contributionsCollection' >/dev/null; t
 fi
 log "Monthly stats validation passed"
 
-# 変更行数の計算関数
 calculate_changes() {
     local json=$1
     local period=$2
@@ -123,7 +122,7 @@ calculate_changes() {
         add // 0
     ')
     log "Calculated changes for $period since $since: $result"
-    echo "$result"
+    printf "%d" "$result"  # 数値のみを返すように修正
 }
 
 # 統計データの抽出
