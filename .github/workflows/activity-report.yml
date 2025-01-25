@@ -1,12 +1,8 @@
 name: GitHub Activity Report
-
 on:
-  # 個人のリポジトリ活動を検知
-  push:
-    branches: [ main, master ]
-  pull_request:
-    types: [ opened, closed ]
-  workflow_dispatch:      # 手動実行用
+  schedule:
+    - cron: '0 21-11 * * *'
+  workflow_dispatch:
 
 env:
   MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
