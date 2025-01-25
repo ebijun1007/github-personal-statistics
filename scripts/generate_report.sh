@@ -113,17 +113,21 @@ calculate_changes() {
         add // 0
     ')
 
-    # デバッグ用ログ
-    log "Calculated changes for $period since $since: $result"
-
-    # 値が数値かどうかチェック
-    if ! [[ "$result" =~ ^[0-9]+$ ]]; then
-        log "Error: Invalid calculated changes value: $result"
+    # 値の妥当性を確認
+    if [[ -z "$result" ]]; then
+        log "Error: Result is empty"
         exit 1
     fi
 
+    if ! [[ "$result" =~ ^[0-9]+$ ]]; then
+        log "Error: Result is not a valid number: $result"
+        exit 1
+    fi
+
+    log "Calculated changes for $period since $since: $result"
     echo "$result"
 }
+
 
 
 
