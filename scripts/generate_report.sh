@@ -131,24 +131,28 @@ if ! [[ "$MONTHLY_CHANGES" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-# PR統計の取得
 echo "Fetching PR statistics..."
 
-# 24時間以内のPR作成数
-DAILY_PRS_CREATED=$(gh pr list --author "@me" --state all --json createdAt | \
-  jq --arg from "$FROM_DATE" '[.[] | select(.createdAt >= $from)] | length')
+# 全リポジトリのPR情報を取得
+PR_QUERY=$(gh api graphql -f query='
+  query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
+    user(login: $owner) {
+      pullRequests(first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
+        nodes {
+          createdAt
+          mergedAt
+          state
+        }
+      }
+    }
+  }
+' -f owner="$USERNAME" -f dailyFrom="$FROM_DATE" -f monthStart="$MONTH_START")
 
-# 24時間以内のPRマージ数
-DAILY_PRS_MERGED=$(gh pr list --author "@me" --state merged --json mergedAt | \
-  jq --arg from "$FROM_DATE" '[.[] | select(.mergedAt >= $from)] | length')
-
-# 月初めからのPR作成数
-MONTHLY_PRS_CREATED=$(gh pr list --author "@me" --state all --json createdAt | \
-  jq --arg from "$MONTH_START" '[.[] | select(.createdAt >= $from)] | length')
-
-# 月初めからのPRマージ数
-MONTHLY_PRS_MERGED=$(gh pr list --author "@me" --state merged --json mergedAt | \
-  jq --arg from "$MONTH_START" '[.[] | select(.mergedAt >= $from)] | length')
+# PRの統計を計算
+DAILY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
+DAILY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
+MONTHLY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
+MONTHLY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
 
 # bcコマンドの確認
 if ! command -v bc &> /dev/null; then
