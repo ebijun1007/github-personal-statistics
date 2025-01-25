@@ -78,10 +78,27 @@ MONTHLY_PRS_CREATED=$(gh pr list --author "@me" --state all --json createdAt | \
 MONTHLY_PRS_MERGED=$(gh pr list --author "@me" --state merged --json mergedAt | \
   jq --arg from "$MONTH_START" '[.[] | select(.mergedAt >= $from)] | length')
 
+# bcコマンドの確認
+if ! command -v bc &> /dev/null; then
+    echo "Error: bc command not found"
+    exit 1
+fi
+
+# 進捗率計算用の関数
+calculate_progress() {
+    local current=$1
+    local goal=$2
+    if [ "$goal" -eq 0 ]; then
+        echo "Error: monthly goal cannot be zero"
+        exit 1
+    fi
+    echo "scale=2; $current * 100 / $goal" | bc
+}
+
 # 月間目標に対する進捗率の計算
-CHANGES_PROGRESS=$((MONTHLY_CHANGES * 100 / MONTHLY_CODE_CHANGES_GOAL))
-PR_CREATION_PROGRESS=$((MONTHLY_PRS_CREATED * 100 / MONTHLY_PR_CREATION_GOAL))
-PR_MERGE_PROGRESS=$((MONTHLY_PRS_MERGED * 100 / MONTHLY_PR_MERGE_GOAL))
+CHANGES_PROGRESS=$(calculate_progress "$MONTHLY_CHANGES" "$MONTHLY_CODE_CHANGES_GOAL")
+PR_CREATION_PROGRESS=$(calculate_progress "$MONTHLY_PRS_CREATED" "$MONTHLY_PR_CREATION_GOAL")
+PR_MERGE_PROGRESS=$(calculate_progress "$MONTHLY_PRS_MERGED" "$MONTHLY_PR_MERGE_GOAL")
 
 # 残り日数の計算
 DAYS_IN_MONTH=$(date -d "$(date +%Y-%m-01) +1 month -1 day" +%d)
