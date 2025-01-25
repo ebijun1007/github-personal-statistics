@@ -97,7 +97,14 @@ calculate_changes() {
     local json=$1
     local period=$2
     local since=$3
-    local result=$(echo "$json" | jq --arg since "$since" --arg period "$period" '
+
+    log "Debugging calculate_changes function:"
+    log "- JSON input: $json"
+    log "- Period: $period"
+    log "- Since: $since"
+
+    # jqの出力をraw-outputで整形
+    local result=$(echo "$json" | jq --raw-output --arg since "$since" --arg period "$period" '
         [.data[$period].contributionsCollection.commitContributionsByRepository[] |
         select(.repository.defaultBranchRef != null) |
         .repository.defaultBranchRef.target.history.nodes[] |
@@ -105,9 +112,19 @@ calculate_changes() {
         (.additions + .deletions)] |
         add // 0
     ')
+
+    # デバッグ用ログ
     log "Calculated changes for $period since $since: $result"
+
+    # 値が数値かどうかチェック
+    if ! [[ "$result" =~ ^[0-9]+$ ]]; then
+        log "Error: Invalid calculated changes value: $result"
+        exit 1
+    fi
+
     echo "$result"
 }
+
 
 
 # 実際の変更行数を計算
