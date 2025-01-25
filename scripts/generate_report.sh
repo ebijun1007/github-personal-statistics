@@ -103,7 +103,7 @@ calculate_changes() {
     log "- Period: $period"
     log "- Since: $since"
 
-    # jqの出力をraw-outputで整形
+    # jqの出力をraw-outputで整形し、空白をトリム
     local result=$(echo "$json" | jq --raw-output --arg since "$since" --arg period "$period" '
         [.data[$period].contributionsCollection.commitContributionsByRepository[] |
         select(.repository.defaultBranchRef != null) |
@@ -111,29 +111,31 @@ calculate_changes() {
         select(.committedDate >= $since) |
         (.additions + .deletions)] |
         add // 0
-    ')
+    ' | tr -d '[:space:]')
 
-    # 値の妥当性を確認
+    log "Calculated changes for $period since $since: $result"
+
+    # 値が空かどうかをチェック
     if [[ -z "$result" ]]; then
         log "Error: Result is empty"
         exit 1
     fi
 
+    # 数値であるかどうかを確認
     if ! [[ "$result" =~ ^[0-9]+$ ]]; then
         log "Error: Result is not a valid number: $result"
         exit 1
     fi
 
-    log "Calculated changes for $period since $since: $result"
     echo "$result"
 }
 
-
-
-
 # 実際の変更行数を計算
 DAILY_CHANGES=$(calculate_changes "$STATS" "daily" "$FROM_DATE")
+log "Final validated DAILY_CHANGES: $DAILY_CHANGES"
+
 MONTHLY_CHANGES=$(calculate_changes "$STATS" "monthly" "$MONTH_START")
+log "Final validated MONTHLY_CHANGES: $MONTHLY_CHANGES"
 
 # 数値の検証
 if ! [[ "$DAILY_CHANGES" =~ ^[0-9]+$ ]]; then
@@ -217,7 +219,6 @@ log "- Remaining days: $REMAINING_DAYS"
 # Slack通知用のJSONペイロードを作成
 log "Creating Slack payload..."
 PAYLOAD=$(jq -n \
-  --arg daily_commits "$DAILY_COMMITS" \
   --arg daily_changes "$DAILY_CHANGES" \
   --arg daily_prs_created "$DAILY_PRS_CREATED" \
   --arg daily_prs_merged "$DAILY_PRS_MERGED" \
@@ -251,7 +252,7 @@ PAYLOAD=$(jq -n \
         "type": "section",
         "text": {
           "type": "mrkdwn",
-          "text": "*Monthly Progress*\n• Code Changes: \($monthly_changes)/\($monthly_goal) lines (\($changes_progress)%)\n• PRs Created: \($monthly_prs_created)/\($pr_creation_goal) (\($pr_creation_progress)%)\n• PRs Merged: \($monthly_prs_merged)/\($pr_merge_goal) (\($pr_merge_progress)%)\n\n_Progress bars:_\n▓▓▓▓░░░░░░ \($changes_progress)%\n▓░░░░░░░░░ \($pr_creation_progress)%\n░░░░░░░░░░ \($pr_merge_progress)%"
+          "text": "*Monthly Progress*\n• Code Changes: \($monthly_changes)/\($monthly_goal) lines (\($changes_progress)%)\n• PRs Created: \($monthly_prs_created)/\($pr_creation_goal) (\($pr_creation_progress)%)\n• PRs Merged: \($monthly_prs_merged)/\($pr_merge_goal) (\($pr_merge_progress)%)"
         }
       },
       {
