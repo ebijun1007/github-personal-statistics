@@ -1,0 +1,30 @@
+{
+  "display_information": {
+    "name": "GitHub Personal Statistics",
+    "description": "Track and notify personal GitHub activity metrics",
+    "background_color": "#2c2d30"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "GitHub Stats Bot",
+      "always_online": true
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "incoming-webhook",
+        "chat:write",
+        "chat:write.public"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false,
+    "interactivity": {
+      "is_enabled": false
+    }
+  }
+}
