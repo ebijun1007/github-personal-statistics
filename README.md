@@ -165,16 +165,15 @@ gh pr list --author @me --state merged --json mergedAt | \
 
 ### 設定項目
 
-1) GitHub Actions Variables
-
-
+1. GitHub Actions Variables
 
 - `MONTHLY_CODE_CHANGES_GOAL`: 月間のコード変更行数目標 (正の整数)
 - `MONTHLY_PR_CREATION_GOAL`: 月間のPR作成数目標 (正の整数)
 - `MONTHLY_PR_MERGE_GOAL`: 月間のPRマージ数目標 (正の整数)
 - `USERNAME`: 個人のGitHubユーザー名（活動フィルタリング用）
+- `DEBUG`: デバッグモードの有効化 (オプション、デフォルト: false)
 
-2) GitHub Secrets
+2. GitHub Secrets
 
 - `GITHUB_TOKEN`: GitHub APIアクセス用（自動設定）
 - `SLACK_WEBHOOK_URL`: Slack通知用Webhook URL
