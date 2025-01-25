@@ -39,9 +39,19 @@ STATS=$(gh api graphql -f query='
         commitContributionsByRepository {
           repository {
             name
-          }
-          contributions {
-            totalCount
+            defaultBranchRef {
+              target {
+                ... on Commit {
+                  history(first: 100) {
+                    nodes {
+                      additions
+                      deletions
+                      committedDate
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -52,9 +62,19 @@ STATS=$(gh api graphql -f query='
         commitContributionsByRepository {
           repository {
             name
-          }
-          contributions {
-            totalCount
+            defaultBranchRef {
+              target {
+                ... on Commit {
+                  history(first: 100) {
+                    nodes {
+                      additions
+                      deletions
+                      committedDate
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -75,13 +95,41 @@ if ! echo "$STATS" | jq -e '.data.monthly.contributionsCollection' >/dev/null; t
     exit 1
 fi
 
+# 変更行数の計算関数
+calculate_changes() {
+    local json=$1
+    local period=$2
+    local since=$3
+    echo "$json" | jq --arg since "$since" --arg period "$period" '
+        [.data[$period].contributionsCollection.commitContributionsByRepository[] |
+        select(.repository.defaultBranchRef != null) |
+        .repository.defaultBranchRef.target.history.nodes[] |
+        select(.committedDate >= $since) |
+        (.additions + .deletions)] |
+        add // 0
+    '
+}
+
 # 統計データの抽出
 DAILY_COMMITS=$(echo "$STATS" | jq '.data.daily.contributionsCollection.totalCommitContributions')
 MONTHLY_COMMITS=$(echo "$STATS" | jq '.data.monthly.contributionsCollection.totalCommitContributions')
 
-# コミット数を変更行数の近似値として使用 (1コミットあたり平均20行の変更と仮定)
-DAILY_CHANGES=$((DAILY_COMMITS * 20))
-MONTHLY_CHANGES=$((MONTHLY_COMMITS * 20))
+# 実際の変更行数を計算
+DAILY_CHANGES=$(calculate_changes "$STATS" "daily" "$FROM_DATE")
+MONTHLY_CHANGES=$(calculate_changes "$STATS" "monthly" "$MONTH_START")
+
+# 数値の検証
+if ! [[ "$DAILY_CHANGES" =~ ^[0-9]+$ ]]; then
+    echo "Error: Invalid daily changes value"
+    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Daily changes: $DAILY_CHANGES"
+    exit 1
+fi
+
+if ! [[ "$MONTHLY_CHANGES" =~ ^[0-9]+$ ]]; then
+    echo "Error: Invalid monthly changes value"
+    [ "${DEBUG:-false}" = "true" ] && echo "Debug: Monthly changes: $MONTHLY_CHANGES"
+    exit 1
+fi
 
 # PR統計の取得
 echo "Fetching PR statistics..."
@@ -116,7 +164,7 @@ calculate_progress() {
         echo "Error: monthly goal cannot be zero"
         exit 1
     fi
-    echo "scale=2; $current * 100 / $goal" | bc
+    printf "%.2f" "$(echo "scale=2; $current * 100 / $goal" | bc)"
 }
 
 # 月間目標に対する進捗率の計算
@@ -130,41 +178,53 @@ CURRENT_DAY=$(date +%d)
 REMAINING_DAYS=$((DAYS_IN_MONTH - CURRENT_DAY + 1))
 
 # Slack通知用のJSONペイロードを作成
-PAYLOAD=$(cat <<EOF
-{
-  "blocks": [
-    {
-      "type": "header",
-      "text": {
-        "type": "plain_text",
-        "text": "📊 GitHub Activity Report"
+PAYLOAD=$(jq -n \
+  --arg daily_commits "$DAILY_COMMITS" \
+  --arg daily_changes "$DAILY_CHANGES" \
+  --arg daily_prs_created "$DAILY_PRS_CREATED" \
+  --arg daily_prs_merged "$DAILY_PRS_MERGED" \
+  --arg monthly_changes "$MONTHLY_CHANGES" \
+  --arg monthly_goal "$MONTHLY_CODE_CHANGES_GOAL" \
+  --arg changes_progress "$CHANGES_PROGRESS" \
+  --arg monthly_prs_created "$MONTHLY_PRS_CREATED" \
+  --arg pr_creation_goal "$MONTHLY_PR_CREATION_GOAL" \
+  --arg pr_creation_progress "$PR_CREATION_PROGRESS" \
+  --arg monthly_prs_merged "$MONTHLY_PRS_MERGED" \
+  --arg pr_merge_goal "$MONTHLY_PR_MERGE_GOAL" \
+  --arg pr_merge_progress "$PR_MERGE_PROGRESS" \
+  --arg remaining_days "$REMAINING_DAYS" \
+  '{
+    "blocks": [
+      {
+        "type": "header",
+        "text": {
+          "type": "plain_text",
+          "text": "📊 GitHub Activity Report"
+        }
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "*Today'\''s Activity*\n• Commits: \($daily_commits)\n• Code Changes: \($daily_changes) lines\n• PRs Created: \($daily_prs_created)\n• PRs Merged: \($daily_prs_merged)"
+        }
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "*Monthly Progress*\n• Code Changes: \($monthly_changes)/\($monthly_goal) lines (\($changes_progress)%)\n• PRs Created: \($monthly_prs_created)/\($pr_creation_goal) (\($pr_creation_progress)%)\n• PRs Merged: \($monthly_prs_merged)/\($pr_merge_goal) (\($pr_merge_progress)%)\n\n_Progress bars:_\n▓▓▓▓░░░░░░ \($changes_progress)%\n▓░░░░░░░░░ \($pr_creation_progress)%\n░░░░░░░░░░ \($pr_merge_progress)%"
+        }
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "*Remaining Days in Month: \($remaining_days)*"
+        }
       }
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "*Today's Activity*\n• Commits: ${DAILY_COMMITS} (≈${DAILY_CHANGES} lines)\n• PRs Created: ${DAILY_PRS_CREATED}\n• PRs Merged: ${DAILY_PRS_MERGED}"
-      }
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "*Monthly Progress*\n• Commits: ${MONTHLY_COMMITS} (≈${MONTHLY_CHANGES}/${MONTHLY_CODE_CHANGES_GOAL} lines, ${CHANGES_PROGRESS}%)\n• PRs Created: ${MONTHLY_PRS_CREATED}/${MONTHLY_PR_CREATION_GOAL} (${PR_CREATION_PROGRESS}%)\n• PRs Merged: ${MONTHLY_PRS_MERGED}/${MONTHLY_PR_MERGE_GOAL} (${PR_MERGE_PROGRESS}%)"
-      }
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "*Remaining Days in Month: ${REMAINING_DAYS}*"
-      }
-    }
-  ]
-}
-EOF
-)
+    ]
+  }')
 
 # Slackに通知を送信
 echo "Sending notification to Slack..."
