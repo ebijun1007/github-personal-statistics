@@ -46,10 +46,8 @@ STATS=$(gh api graphql -f query='
   query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
     daily: user(login: $owner) {
       contributionsCollection(from: $dailyFrom) {
-        totalCommitContributions
         commitContributionsByRepository {
           repository {
-            name
             defaultBranchRef {
               target {
                 ... on Commit {
@@ -69,10 +67,8 @@ STATS=$(gh api graphql -f query='
     }
     monthly: user(login: $owner) {
       contributionsCollection(from: $monthStart) {
-        totalCommitContributions
         commitContributionsByRepository {
           repository {
-            name
             defaultBranchRef {
               target {
                 ... on Commit {
@@ -96,19 +92,7 @@ STATS=$(gh api graphql -f query='
 log "Raw GitHub API Response:"
 echo "$STATS" | jq '.'
 
-# APIレスポンスの検証
-if ! echo "$STATS" | jq -e '.data.daily.contributionsCollection' >/dev/null; then
-    log "Error: Invalid daily stats response"
-    exit 1
-fi
-log "Daily stats validation passed"
-
-if ! echo "$STATS" | jq -e '.data.monthly.contributionsCollection' >/dev/null; then
-    log "Error: Invalid monthly stats response"
-    exit 1
-fi
-log "Monthly stats validation passed"
-
+# 変更行数の計算関数
 calculate_changes() {
     local json=$1
     local period=$2
@@ -122,16 +106,10 @@ calculate_changes() {
         add // 0
     ')
     log "Calculated changes for $period since $since: $result"
-    printf "%d" "$result"  # 数値のみを返すように修正
+    echo "$result"
 }
 
-# 統計データの抽出
-DAILY_COMMITS=$(echo "$STATS" | jq '.data.daily.contributionsCollection.totalCommitContributions')
-MONTHLY_COMMITS=$(echo "$STATS" | jq '.data.monthly.contributionsCollection.totalCommitContributions')
-
-log "Commit counts:"
-log "- Daily commits: $DAILY_COMMITS"
-log "- Monthly commits: $MONTHLY_COMMITS"
+# コミット数の計測は除外
 
 # 実際の変更行数を計算
 DAILY_CHANGES=$(calculate_changes "$STATS" "daily" "$FROM_DATE")
@@ -246,7 +224,7 @@ PAYLOAD=$(jq -n \
         "type": "section",
         "text": {
           "type": "mrkdwn",
-          "text": "*Today'\''s Activity*\n• Commits: \($daily_commits)\n• Code Changes: \($daily_changes) lines\n• PRs Created: \($daily_prs_created)\n• PRs Merged: \($daily_prs_merged)"
+          "text": "*Today'\''s Activity*\n• Code Changes: \($daily_changes) lines\n• PRs Created: \($daily_prs_created)\n• PRs Merged: \($daily_prs_merged)"
         }
       },
       {
