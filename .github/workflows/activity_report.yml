@@ -1,0 +1,29 @@
+name: GitHub Activity Report
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    types: [ opened, closed ]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * *'   # 6 PM JST
+    - cron: '0 21 * * *'  # 6 AM JST
+
+env:
+  MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
+  MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
+  MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
+  USERNAME: ${{ vars.USERNAME }}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Activity Report
+        run: |
+          chmod +x ./scripts/generate_report.sh
+          ./scripts/generate_report.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
