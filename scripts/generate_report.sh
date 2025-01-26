@@ -2,6 +2,14 @@
 
 set -e
 
+# Check if we should run based on schedule (6 AM and 6 PM JST)
+if [ -f "$(dirname "$0")/check_schedule.sh" ]; then
+    bash "$(dirname "$0")/check_schedule.sh"
+    if [ $? -ne 0 ]; then
+        exit 0
+    fi
+fi
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" 1>&2
 }
