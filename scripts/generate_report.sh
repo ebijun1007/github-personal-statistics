@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+cd "$(dirname "$0")/.."
 
 set -e
 
@@ -49,9 +51,16 @@ for goal in "MONTHLY_CODE_CHANGES_GOAL" "MONTHLY_PR_CREATION_GOAL" "MONTHLY_PR_M
 done
 
 # 過去24時間の期間を設定
-FROM_DATE=$(date -d '24 hours ago' -u +"%Y-%m-%dT%H:%M:%SZ")
-CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-MONTH_START=$(date -d "$(date +%Y-%m-01)" -u +"%Y-%m-%dT%H:%M:%SZ")
+if [ -z "${GITHUB_ACTIONS}" ]; then
+    # テスト用の日付設定（2024年のデータを取得）
+    FROM_DATE="2024-01-26T00:00:00Z"
+    CURRENT_DATE="2024-01-27T23:59:59Z"
+    MONTH_START="2024-01-01T00:00:00Z"
+else
+    FROM_DATE=$(date -d '24 hours ago' -u +"%Y-%m-%dT%H:%M:%SZ")
+    CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    MONTH_START=$(date -d "$(date +%Y-%m-01)" -u +"%Y-%m-%dT%H:%M:%SZ")
+fi
 
 log "Time ranges:"
 log "- From: $FROM_DATE"
@@ -63,18 +72,28 @@ log "Fetching commit statistics..."
 
 # 個人の活動量を取得
 log "Fetching personal commit statistics..."
+# Convert dates to ISO 8601 format for GitHub API
+# Use original ISO8601 format for DateTime fields
+daily_from_iso="$FROM_DATE"
+month_start_iso="$MONTH_START"
+
+log "Using time ranges:"
+log "- Daily From: $daily_from_iso"
+log "- Month Start: $month_start_iso"
+log "- Current: $CURRENT_DATE"
+
 PERSONAL_STATS=$(gh api graphql -f query='
   query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
     daily: user(login: $owner) {
       contributionsCollection(from: $dailyFrom) {
         totalCommitContributions
-        commitContributionsByRepository {
+        commitContributionsByRepository(maxRepositories: 10) {
           repository {
             nameWithOwner
             defaultBranchRef {
               target {
                 ... on Commit {
-                  history(first: 100, author: {emails: ["*"]}) {
+                  history(first: 10, since: $dailyFrom) {
                     nodes {
                       additions
                       deletions
@@ -97,13 +116,13 @@ PERSONAL_STATS=$(gh api graphql -f query='
     monthly: user(login: $owner) {
       contributionsCollection(from: $monthStart) {
         totalCommitContributions
-        commitContributionsByRepository {
+        commitContributionsByRepository(maxRepositories: 10) {
           repository {
             nameWithOwner
             defaultBranchRef {
               target {
                 ... on Commit {
-                  history(first: 100, author: {emails: ["*"]}) {
+                  history(first: 10, since: $monthStart) {
                     nodes {
                       additions
                       deletions
@@ -124,7 +143,7 @@ PERSONAL_STATS=$(gh api graphql -f query='
       }
     }
   }
-' -f owner="$USERNAME" -f dailyFrom="$FROM_DATE" -f monthStart="$MONTH_START")
+' -f owner="$USERNAME" -f dailyFrom="$daily_from_iso" -f monthStart="$month_start_iso" -f dailyFromGit="$daily_from_iso" -f monthStartGit="$month_start_iso")
 
 # リポジトリ全体の活動量を取得
 log "Fetching repository-wide commit statistics..."
@@ -132,6 +151,8 @@ REPO_STATS=""
 while IFS= read -r repo; do
     log "Fetching commits for repository: $repo"
     REPO_QUERY=$(gh api graphql -f query='
+      # Repository commit history query
+      # Fetching last 30 commits to avoid timeouts
       query($owner: String!, $repo: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
         daily: repository(owner: $owner, name: $repo) {
           defaultBranchRef {
@@ -176,17 +197,32 @@ while IFS= read -r repo; do
           }
         }
       }
-    ' -f owner="$REPO_OWNER" -f repo="$repo" -f dailyFrom="$FROM_DATE" -f monthStart="$MONTH_START")
+    ' -f owner="$REPO_OWNER" -f repo="$repo" -f dailyFrom="$daily_from_iso" -f monthStart="$month_start_iso" -f dailyFromGit="$daily_from_iso" -f monthStartGit="$month_start_iso" 2>/dev/null || echo "{}")
     
-    if [ -z "$REPO_STATS" ]; then
-        REPO_STATS="$REPO_QUERY"
+    # Debug: Print raw response for this repository
+    log "Raw GraphQL response for $repo:"
+    echo "$REPO_QUERY" | jq '.' || echo "Failed to parse JSON"
+    
+    # Check for GraphQL errors
+    if [[ "$REPO_QUERY" == *"Something went wrong"* ]]; then
+        log "Error: GraphQL query failed for $repo"
+        continue
+    elif [ -n "$REPO_QUERY" ] && [ "$REPO_QUERY" != "{}" ]; then
+        if [ -z "$REPO_STATS" ]; then
+            REPO_STATS="$REPO_QUERY"
+        else
+            REPO_STATS="$REPO_STATS\n$REPO_QUERY"
+        fi
+        log "Successfully fetched stats for $repo"
     else
-        REPO_STATS="$REPO_STATS\n$REPO_QUERY"
+        log "Warning: No data retrieved for $repo"
     fi
 done <<< "$REPOS"
 
 log "Raw GitHub API Response:"
-echo "$STATS" | jq '.'
+echo "$PERSONAL_STATS" | jq '.'
+log "Raw Repository Stats:"
+echo -e "$REPO_STATS" | jq '.'
 
 # 変更行数の計算関数
 calculate_personal_changes() {
@@ -205,10 +241,10 @@ calculate_personal_changes() {
         [.data[$period].contributionsCollection.commitContributionsByRepository[] |
         select(.repository.defaultBranchRef != null) |
         .repository.defaultBranchRef.target.history.nodes[] |
-        select(.committedDate >= $since and .author.user.login == $username) |
+        select(.committedDate >= $since and (.author.user.login == $username or (.author.user == null and .author.email | contains($username)))) |
         (.additions + .deletions)] |
         add // 0
-    ' | tr -d '[:space:]')
+    ' 2>/dev/null | tr -d '[:space:]' || echo "0")
 
     log "Calculated personal changes for $period since $since: $result"
     echo "${result:-0}"
@@ -226,14 +262,27 @@ calculate_repo_changes() {
     # 各リポジトリの変更を集計
     local result=0
     while IFS= read -r repo_stats; do
-        if [ -n "$repo_stats" ]; then
+        if [ -n "$repo_stats" ] && [ "$repo_stats" != "{}" ]; then
+            # Add debug logging
+            log "Repository stats JSON:"
+            echo "$repo_stats" | jq '.' || echo "Invalid JSON"
+            
             local repo_changes=$(echo "$repo_stats" | jq --raw-output --arg since "$since" --arg period "$period" '
-                [.[$period].defaultBranchRef.target.history.nodes[] |
-                select(.committedDate >= $since) |
+                [.data[$period].defaultBranchRef.target.history.nodes[] |
+                select(.committedDate >= $since and .author != null) |
                 (.additions + .deletions)] |
                 add // 0
-            ' | tr -d '[:space:]')
-            result=$((result + ${repo_changes:-0}))
+            ' 2>/dev/null | tr -d '[:space:]' || echo "0")
+            
+            # Debug: Print calculated changes
+            log "Calculated changes for repository in $period period: $repo_changes"
+            
+            if [[ "$repo_changes" =~ ^[0-9]+$ ]]; then
+                result=$((result + repo_changes))
+                log "Repository changes calculated: $repo_changes"
+            else
+                log "Warning: Invalid changes value from repository: $repo_changes"
+            fi
         fi
     done <<< "$(echo -e "$json")"
 
