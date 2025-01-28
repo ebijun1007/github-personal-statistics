@@ -86,14 +86,16 @@ PERSONAL_STATS=$(gh api graphql -f query='
   query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
     daily: user(login: $owner) {
       contributionsCollection(from: $dailyFrom) {
-        totalCommitContributions
-        commitContributionsByRepository(maxRepositories: 10) {
+        commitContributionsByRepository(maxRepositories: 100) {
           repository {
             nameWithOwner
+            owner {
+              login
+            }
             defaultBranchRef {
               target {
                 ... on Commit {
-                  history(first: 10, since: $dailyFrom) {
+                  history(first: 100, since: $dailyFrom) {
                     nodes {
                       additions
                       deletions
@@ -115,14 +117,16 @@ PERSONAL_STATS=$(gh api graphql -f query='
     }
     monthly: user(login: $owner) {
       contributionsCollection(from: $monthStart) {
-        totalCommitContributions
-        commitContributionsByRepository(maxRepositories: 10) {
+        commitContributionsByRepository(maxRepositories: 100) {
           repository {
             nameWithOwner
+            owner {
+              login
+            }
             defaultBranchRef {
               target {
                 ... on Commit {
-                  history(first: 10, since: $monthStart) {
+                  history(first: 100, since: $monthStart) {
                     nodes {
                       additions
                       deletions
@@ -145,79 +149,77 @@ PERSONAL_STATS=$(gh api graphql -f query='
   }
 ' -f owner="$USERNAME" -f dailyFrom="$daily_from_iso" -f monthStart="$month_start_iso" -f dailyFromGit="$daily_from_iso" -f monthStartGit="$month_start_iso")
 
-# リポジトリ全体の活動量を取得
-log "Fetching repository-wide commit statistics..."
-REPO_STATS=""
-while IFS= read -r repo; do
-    log "Fetching commits for repository: $repo"
-    REPO_QUERY=$(gh api graphql -f query='
-      # Repository commit history query
-      # Fetching last 30 commits to avoid timeouts
-      query($owner: String!, $repo: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
-        daily: repository(owner: $owner, name: $repo) {
-          defaultBranchRef {
-            target {
-              ... on Commit {
-                history(first: 100, since: $dailyFrom) {
-                  nodes {
-                    additions
-                    deletions
-                    committedDate
-                    author {
-                      email
-                      user {
-                        login
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        monthly: repository(owner: $owner, name: $repo) {
-          defaultBranchRef {
-            target {
-              ... on Commit {
-                history(first: 100, since: $monthStart) {
-                  nodes {
-                    additions
-                    deletions
-                    committedDate
-                    author {
-                      email
-                      user {
-                        login
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    ' -f owner="$REPO_OWNER" -f repo="$repo" -f dailyFrom="$daily_from_iso" -f monthStart="$month_start_iso" -f dailyFromGit="$daily_from_iso" -f monthStartGit="$month_start_iso" 2>/dev/null || echo "{}")
-    
-    # Debug: Print raw response for this repository
-    log "Raw GraphQL response for $repo:"
-    echo "$REPO_QUERY" | jq '.' || echo "Failed to parse JSON"
-    
-    # Check for GraphQL errors
-    if [[ "$REPO_QUERY" == *"Something went wrong"* ]]; then
-        log "Error: GraphQL query failed for $repo"
-        continue
-    elif [ -n "$REPO_QUERY" ] && [ "$REPO_QUERY" != "{}" ]; then
-        if [ -z "$REPO_STATS" ]; then
-            REPO_STATS="$REPO_QUERY"
-        else
-            REPO_STATS="$REPO_STATS\n$REPO_QUERY"
-        fi
-        log "Successfully fetched stats for $repo"
-    else
-        log "Warning: No data retrieved for $repo"
-    fi
-done <<< "$REPOS"
+# リポジトリ全体の活動量を取得（所有リポジトリのみ）
+log "Fetching repository-wide commit statistics (owned repositories)..."
+REPO_STATS=$(gh api graphql -f query='
+   query($owner: String!, $dailyFrom: DateTime!, $monthStart: DateTime!) {
+     daily: user(login: $owner) {
+       repositories(first: 100, ownerAffiliations: OWNER) {
+         nodes {
+           nameWithOwner
+           defaultBranchRef {
+             target {
+               ... on Commit {
+                 history(first: 100, since: $dailyFrom) {
+                   nodes {
+                     additions
+                     deletions
+                     committedDate
+                     author {
+                       email
+                       user {
+                         login
+                       }
+                     }
+                   }
+                 }
+               }
+             }
+           }
+         }
+       }
+     }
+     monthly: user(login: $owner) {
+       repositories(first: 100, ownerAffiliations: OWNER) {
+         nodes {
+           nameWithOwner
+           defaultBranchRef {
+             target {
+               ... on Commit {
+                 history(first: 100, since: $monthStart) {
+                   nodes {
+                     additions
+                     deletions
+                     committedDate
+                     author {
+                       email
+                       user {
+                         login
+                       }
+                     }
+                   }
+                 }
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+' -f owner="$USERNAME" -f dailyFrom="$daily_from_iso" -f monthStart="$month_start_iso")
+
+# Debug: Print raw response
+log "Raw repository statistics response:"
+echo "$REPO_STATS" | jq '.' || echo "Failed to parse JSON"
+
+# Check for GraphQL errors
+if [[ "$REPO_STATS" == *"Something went wrong"* ]]; then
+    log "Error: GraphQL query failed for repository statistics"
+elif [ -z "$REPO_STATS" ] || [ "$REPO_STATS" = "{}" ]; then
+    log "Warning: No repository data retrieved"
+else
+    log "Successfully fetched repository statistics"
+fi
 
 log "Raw GitHub API Response:"
 echo "$PERSONAL_STATS" | jq '.'
@@ -259,32 +261,23 @@ calculate_repo_changes() {
     log "- Period: $period"
     log "- Since: $since"
 
-    # 各リポジトリの変更を集計
-    local result=0
-    while IFS= read -r repo_stats; do
-        if [ -n "$repo_stats" ] && [ "$repo_stats" != "{}" ]; then
-            # Add debug logging
-            log "Repository stats JSON:"
-            echo "$repo_stats" | jq '.' || echo "Invalid JSON"
-            
-            local repo_changes=$(echo "$repo_stats" | jq --raw-output --arg since "$since" --arg period "$period" '
-                [.data[$period].defaultBranchRef.target.history.nodes[] |
-                select(.committedDate >= $since and .author != null) |
-                (.additions + .deletions)] |
-                add // 0
-            ' 2>/dev/null | tr -d '[:space:]' || echo "0")
-            
-            # Debug: Print calculated changes
-            log "Calculated changes for repository in $period period: $repo_changes"
-            
-            if [[ "$repo_changes" =~ ^[0-9]+$ ]]; then
-                result=$((result + repo_changes))
-                log "Repository changes calculated: $repo_changes"
-            else
-                log "Warning: Invalid changes value from repository: $repo_changes"
-            fi
-        fi
-    done <<< "$(echo -e "$json")"
+    # Process all repositories in a single jq query
+    local result=$(echo "$json" | jq --raw-output --arg since "$since" --arg period "$period" '
+        [.data[$period].repositories.nodes[] |
+        select(.defaultBranchRef != null) |
+        .defaultBranchRef.target.history.nodes[] |
+        select(.committedDate >= $since and .author != null) |
+        (.additions + .deletions)] |
+        add // 0
+    ' 2>/dev/null | tr -d '[:space:]' || echo "0")
+
+    # Validate result
+    if [[ "$result" =~ ^[0-9]+$ ]]; then
+        log "Repository changes calculated: $result"
+    else
+        log "Warning: Invalid changes value from repositories: $result"
+        result=0
+    fi
 
     log "Calculated repository changes for $period since $since: $result"
     echo "$result"
@@ -295,15 +288,36 @@ calculate_total_changes() {
     local personal_changes=$1
     local repo_changes=$2
     local overlap_changes=$3
+    local period=$4
 
-    log "Calculating total changes:"
+    log "Calculating total changes for $period period:"
+    log "Input values:"
     log "- Personal changes: $personal_changes"
     log "- Repository changes: $repo_changes"
-    log "- Overlap changes: $overlap_changes"
+    log "- Overlap (double-counted) changes: $overlap_changes"
+
+    # 入力値の検証
+    if ! [[ "$personal_changes" =~ ^[0-9]+$ ]] || \
+       ! [[ "$repo_changes" =~ ^[0-9]+$ ]] || \
+       ! [[ "$overlap_changes" =~ ^[0-9]+$ ]]; then
+        log "Error: Invalid input values detected for $period"
+        log "- Personal changes (valid number?): $([[ "$personal_changes" =~ ^[0-9]+$ ]] && echo "Yes" || echo "No")"
+        log "- Repository changes (valid number?): $([[ "$repo_changes" =~ ^[0-9]+$ ]] && echo "Yes" || echo "No")"
+        log "- Overlap changes (valid number?): $([[ "$overlap_changes" =~ ^[0-9]+$ ]] && echo "Yes" || echo "No")"
+        return 0
+    fi
 
     # 重複を除いた合計を計算
     local total=$((personal_changes + repo_changes - overlap_changes))
-    log "Total changes (without double counting): $total"
+    log "Calculation for $period:"
+    log "- Formula: $personal_changes + $repo_changes - $overlap_changes"
+    log "- Result: $total"
+
+    if [ "$total" -lt 0 ]; then
+        log "Warning: Negative total detected ($total) for $period. This might indicate an issue with overlap calculation."
+        total=0
+    fi
+
     echo "$total"
 }
 
@@ -326,9 +340,43 @@ log "- Daily: $DAILY_REPO_CHANGES"
 log "- Monthly: $MONTHLY_REPO_CHANGES"
 
 # オーバーラップの計算（個人の変更のうち、自分のリポジトリでの変更分）
+calculate_overlap_changes() {
+    local json=$1
+    local period=$2
+    local since=$3
+    local username=$4
+
+    log "Calculating overlap changes:"
+    log "- Period: $period"
+    log "- Since: $since"
+    log "- Username: $username"
+
+    # Calculate changes only for commits by the user in their owned repositories
+    local result=$(echo "$json" | jq --raw-output --arg since "$since" --arg period "$period" --arg username "$username" '
+        [.data[$period].contributionsCollection.commitContributionsByRepository[] |
+        select(.repository.owner.login == $username) |
+        select(.repository.defaultBranchRef != null) |
+        .repository.defaultBranchRef.target.history.nodes[] |
+        select(.committedDate >= $since and (.author.user.login == $username or (.author.user == null and .author.email | contains($username)))) |
+        (.additions + .deletions)] |
+        add // 0
+    ' 2>/dev/null | tr -d '[:space:]' || echo "0")
+
+    # Validate result
+    if [[ "$result" =~ ^[0-9]+$ ]]; then
+        log "Overlap changes calculated: $result"
+    else
+        log "Warning: Invalid overlap changes value: $result"
+        result=0
+    fi
+
+    log "Calculated overlap changes for $period since $since: $result"
+    echo "$result"
+}
+
 log "Calculating overlap changes..."
-DAILY_OVERLAP_CHANGES=$(calculate_personal_changes "$PERSONAL_STATS" "daily" "$FROM_DATE" "$USERNAME")
-MONTHLY_OVERLAP_CHANGES=$(calculate_personal_changes "$PERSONAL_STATS" "monthly" "$MONTH_START" "$USERNAME")
+DAILY_OVERLAP_CHANGES=$(calculate_overlap_changes "$PERSONAL_STATS" "daily" "$FROM_DATE" "$USERNAME")
+MONTHLY_OVERLAP_CHANGES=$(calculate_overlap_changes "$PERSONAL_STATS" "monthly" "$MONTH_START" "$USERNAME")
 
 log "Overlap changes:"
 log "- Daily: $DAILY_OVERLAP_CHANGES"
@@ -336,12 +384,21 @@ log "- Monthly: $MONTHLY_OVERLAP_CHANGES"
 
 # 重複を除いた合計の計算
 log "Calculating total changes (without double counting)..."
-DAILY_CHANGES=$(calculate_total_changes "$DAILY_PERSONAL_CHANGES" "$DAILY_REPO_CHANGES" "$DAILY_OVERLAP_CHANGES")
-MONTHLY_CHANGES=$(calculate_total_changes "$MONTHLY_PERSONAL_CHANGES" "$MONTHLY_REPO_CHANGES" "$MONTHLY_OVERLAP_CHANGES")
+log "Daily metrics breakdown:"
+log "- Personal Changes: $DAILY_PERSONAL_CHANGES"
+log "- Repository Changes: $DAILY_REPO_CHANGES"
+log "- Overlap (double-counted) Changes: $DAILY_OVERLAP_CHANGES"
+DAILY_CHANGES=$(calculate_total_changes "$DAILY_PERSONAL_CHANGES" "$DAILY_REPO_CHANGES" "$DAILY_OVERLAP_CHANGES" "daily")
+
+log "Monthly metrics breakdown:"
+log "- Personal Changes: $MONTHLY_PERSONAL_CHANGES"
+log "- Repository Changes: $MONTHLY_REPO_CHANGES"
+log "- Overlap (double-counted) Changes: $MONTHLY_OVERLAP_CHANGES"
+MONTHLY_CHANGES=$(calculate_total_changes "$MONTHLY_PERSONAL_CHANGES" "$MONTHLY_REPO_CHANGES" "$MONTHLY_OVERLAP_CHANGES" "monthly")
 
 log "Final changes (without double counting):"
-log "- Daily: $DAILY_CHANGES"
-log "- Monthly: $MONTHLY_CHANGES"
+log "- Daily Total: $DAILY_CHANGES (Personal: $DAILY_PERSONAL_CHANGES + Repo: $DAILY_REPO_CHANGES - Overlap: $DAILY_OVERLAP_CHANGES)"
+log "- Monthly Total: $MONTHLY_CHANGES (Personal: $MONTHLY_PERSONAL_CHANGES + Repo: $MONTHLY_REPO_CHANGES - Overlap: $MONTHLY_OVERLAP_CHANGES)"
 
 # 数値の検証
 if ! [[ "$DAILY_CHANGES" =~ ^[0-9]+$ ]]; then
@@ -359,14 +416,29 @@ log "Change counts validated"
 log "Fetching PR statistics..."
 
 # PR統計の初期化
+log "Initializing PR statistics..."
 DAILY_PRS_CREATED=0
 DAILY_PRS_MERGED=0
 MONTHLY_PRS_CREATED=0
 MONTHLY_PRS_MERGED=0
 
 # 全リポジトリに対してPR情報を取得
+log "Starting PR data collection for all repositories..."
+log "Time ranges for PR statistics:"
+log "- Daily from: $FROM_DATE"
+log "- Monthly from: $MONTH_START"
+
 while IFS= read -r repo; do
-    log "Fetching PRs for repository: $repo"
+    log "Processing repository: $repo"
+    log "- Fetching PR data since $FROM_DATE for daily stats"
+    log "- Fetching PR data since $MONTH_START for monthly stats"
+    log "Executing GraphQL query for repository: $repo"
+    log "Query parameters:"
+    log "- Repository Owner: $REPO_OWNER"
+    log "- Repository Name: $repo"
+    log "- States: [OPEN, CLOSED, MERGED]"
+    log "- Limit: 100 PRs"
+    
     PR_QUERY=$(gh api graphql -f query='
       query($repoOwner: String!, $repoName: String!) {
         repository(owner: $repoOwner, name: $repoName) {
@@ -384,13 +456,49 @@ while IFS= read -r repo; do
       }
     ' -f repoOwner="$REPO_OWNER" -f repoName="$repo")
 
-    log "Processing PR data for $repo"
+    # Validate GraphQL response
+    if [ -z "$PR_QUERY" ]; then
+        log "Warning: Empty GraphQL response for repository $repo"
+        continue
+    fi
+
+    # Check for GraphQL errors
+    if echo "$PR_QUERY" | jq -e '.errors' >/dev/null; then
+        log "Warning: GraphQL query returned errors for repository $repo:"
+        echo "$PR_QUERY" | jq '.errors' || log "Failed to parse GraphQL errors"
+        continue
+    fi
+
+    log "Successfully retrieved PR data for $repo"
+    log "Raw GraphQL response structure:"
+    echo "$PR_QUERY" | jq -r 'paths | select(length > 0) | join(".")' || log "Failed to analyze GraphQL response structure"
     
     # リポジトリごとのPR統計を計算
+    log "Calculating PR statistics for repository: $repo"
+    log "- Using time ranges:"
+    log "  • Daily: from $FROM_DATE"
+    log "  • Monthly: from $MONTH_START"
+    log "- Filtering for user: $USERNAME"
+
+    # Daily PR statistics
     REPO_DAILY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" --arg username "$USERNAME" '[.data.repository.pullRequests.nodes[] | select(.createdAt >= $from and .author.login == $username)] | length')
     REPO_DAILY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$FROM_DATE" --arg username "$USERNAME" '[.data.repository.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from and .author.login == $username)] | length')
+    
+    # Monthly PR statistics
     REPO_MONTHLY_PRS_CREATED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" --arg username "$USERNAME" '[.data.repository.pullRequests.nodes[] | select(.createdAt >= $from and .author.login == $username)] | length')
     REPO_MONTHLY_PRS_MERGED=$(echo "$PR_QUERY" | jq --arg from "$MONTH_START" --arg username "$USERNAME" '[.data.repository.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from and .author.login == $username)] | length')
+
+    # Validate PR counts
+    if ! [[ "$REPO_DAILY_PRS_CREATED" =~ ^[0-9]+$ ]] || ! [[ "$REPO_DAILY_PRS_MERGED" =~ ^[0-9]+$ ]] || \
+       ! [[ "$REPO_MONTHLY_PRS_CREATED" =~ ^[0-9]+$ ]] || ! [[ "$REPO_MONTHLY_PRS_MERGED" =~ ^[0-9]+$ ]]; then
+        log "Warning: Invalid PR count detected for repository $repo"
+        log "Raw counts:"
+        log "- Daily Created: $REPO_DAILY_PRS_CREATED"
+        log "- Daily Merged: $REPO_DAILY_PRS_MERGED"
+        log "- Monthly Created: $REPO_MONTHLY_PRS_CREATED"
+        log "- Monthly Merged: $REPO_MONTHLY_PRS_MERGED"
+        continue
+    fi
 
     # 合計に加算
     DAILY_PRS_CREATED=$((DAILY_PRS_CREATED + REPO_DAILY_PRS_CREATED))
@@ -398,11 +506,18 @@ while IFS= read -r repo; do
     MONTHLY_PRS_CREATED=$((MONTHLY_PRS_CREATED + REPO_MONTHLY_PRS_CREATED))
     MONTHLY_PRS_MERGED=$((MONTHLY_PRS_MERGED + REPO_MONTHLY_PRS_MERGED))
 
-    log "Repository $repo PR stats:"
-    log "- Daily Created: $REPO_DAILY_PRS_CREATED"
-    log "- Daily Merged: $REPO_DAILY_PRS_MERGED"
-    log "- Monthly Created: $REPO_MONTHLY_PRS_CREATED"
-    log "- Monthly Merged: $REPO_MONTHLY_PRS_MERGED"
+    log "Repository $repo PR statistics:"
+    log "- Daily metrics:"
+    log "  • Created: $REPO_DAILY_PRS_CREATED"
+    log "  • Merged: $REPO_DAILY_PRS_MERGED"
+    log "- Monthly metrics:"
+    log "  • Created: $REPO_MONTHLY_PRS_CREATED"
+    log "  • Merged: $REPO_MONTHLY_PRS_MERGED"
+    log "- Running totals:"
+    log "  • Daily Created (total): $DAILY_PRS_CREATED"
+    log "  • Daily Merged (total): $DAILY_PRS_MERGED"
+    log "  • Monthly Created (total): $MONTHLY_PRS_CREATED"
+    log "  • Monthly Merged (total): $MONTHLY_PRS_MERGED"
 done <<< "$REPOS"
 
 log "Total PR Statistics:"
@@ -428,19 +543,34 @@ log "bc command available"
 calculate_progress() {
     local current=$1
     local goal=$2
+    local metric_name=$3
+
+    log "Calculating progress for $metric_name:"
+    log "- Current value: $current"
+    log "- Goal value: $goal"
+
     if [ "$goal" -eq 0 ]; then
-        log "Error: monthly goal cannot be zero"
+        log "Error: Goal value cannot be zero for $metric_name"
         exit 1
     fi
+
+    if ! [[ "$current" =~ ^[0-9]+$ ]]; then
+        log "Error: Invalid current value for $metric_name: $current"
+        exit 1
+    fi
+
     local progress=$(printf "%.2f" "$(echo "scale=2; $current * 100 / $goal" | bc)")
-    log "Progress calculation: $current / $goal = $progress%"
+    log "Progress calculation for $metric_name:"
+    log "- Formula: ($current / $goal) * 100"
+    log "- Result: $progress%"
     echo "$progress"
 }
 
 # 月間目標に対する進捗率の計算
-CHANGES_PROGRESS=$(calculate_progress "$MONTHLY_CHANGES" "$MONTHLY_CODE_CHANGES_GOAL")
-PR_CREATION_PROGRESS=$(calculate_progress "$MONTHLY_PRS_CREATED" "$MONTHLY_PR_CREATION_GOAL")
-PR_MERGE_PROGRESS=$(calculate_progress "$MONTHLY_PRS_MERGED" "$MONTHLY_PR_MERGE_GOAL")
+log "Calculating monthly progress metrics..."
+CHANGES_PROGRESS=$(calculate_progress "$MONTHLY_CHANGES" "$MONTHLY_CODE_CHANGES_GOAL" "Total Code Changes")
+PR_CREATION_PROGRESS=$(calculate_progress "$MONTHLY_PRS_CREATED" "$MONTHLY_PR_CREATION_GOAL" "PR Creation")
+PR_MERGE_PROGRESS=$(calculate_progress "$MONTHLY_PRS_MERGED" "$MONTHLY_PR_MERGE_GOAL" "PR Merges")
 
 # 残り日数の計算
 DAYS_IN_MONTH=$(date -d "$(date +%Y-%m-01) +1 month -1 day" +%d)
@@ -485,21 +615,21 @@ PAYLOAD=$(jq -n \
         "type": "section",
         "text": {
           "type": "mrkdwn",
-          "text": "*Activity Metrics Explanation*\n• Personal Changes: All commits by you across any repository\n• Repository Changes: All commits in your repositories\n• Total Changes: Combined activity without double-counting"
+          "text": "*Activity Metrics Explanation*\n• Personal Changes: Commits by you in any repository (owned or external)\n• Repository Changes: All commits in repositories you own\n• Overlap Changes: Your commits in your repositories (counted in both above)\n• Total Changes: Personal + Repository - Overlap (no double-counting)"
         }
       },
       {
         "type": "section",
         "text": {
           "type": "mrkdwn",
-          "text": "*Today'\''s Activity*\n• Personal Changes: \($daily_personal_changes) lines\n• Repository Changes: \($daily_repo_changes) lines\n• Total Changes (No Double Count): \($daily_changes) lines\n• PRs Created: \($daily_prs_created)\n• PRs Merged: \($daily_prs_merged)"
+          "text": "*Today'\''s Activity*\n• Personal Changes: \($daily_personal_changes) lines\n• Repository Changes: \($daily_repo_changes) lines\n• Overlap (Double-Counted): \($daily_overlap_changes) lines\n• Total Changes (No Double Count): \($daily_changes) lines\n• PRs Created: \($daily_prs_created)\n• PRs Merged: \($daily_prs_merged)"
         }
       },
       {
         "type": "section",
         "text": {
           "type": "mrkdwn",
-          "text": "*Monthly Progress*\n• Personal Changes: \($monthly_personal_changes) lines\n• Repository Changes: \($monthly_repo_changes) lines\n• Total Changes (No Double Count): \($monthly_changes)/\($monthly_goal) lines (\($changes_progress)%)\n• PRs Created: \($monthly_prs_created)/\($pr_creation_goal) (\($pr_creation_progress)%)\n• PRs Merged: \($monthly_prs_merged)/\($pr_merge_goal) (\($pr_merge_progress)%)"
+          "text": "*Monthly Progress*\n• Personal Changes: \($monthly_personal_changes) lines\n• Repository Changes: \($monthly_repo_changes) lines\n• Overlap (Double-Counted): \($monthly_overlap_changes) lines\n• Total Changes (No Double Count): \($monthly_changes)/\($monthly_goal) lines (\($changes_progress)%)\n• PRs Created: \($monthly_prs_created)/\($pr_creation_goal) (\($pr_creation_progress)%)\n• PRs Merged: \($monthly_prs_merged)/\($pr_merge_goal) (\($pr_merge_progress)%)"
         }
       },
       {
