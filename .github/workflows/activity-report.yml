@@ -6,22 +6,20 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
-  issues: read
-  actions: read
 
 jobs:
   report:
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_PAT: ${{ secrets.GH_PAT }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL || '100' }}
-      MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL || '10' }}
-      MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL || '5' }}
-      USERNAME: ${{ vars.USERNAME || 'ebijun1007' }}
+      MONTHLY_CODE_CHANGES_GOAL: '100'
+      MONTHLY_PR_CREATION_GOAL: '10'
+      MONTHLY_PR_MERGE_GOAL: '5'
+      USERNAME: 'ebijun1007'
       DEBUG: "true"
     steps:
       - uses: actions/checkout@v4
