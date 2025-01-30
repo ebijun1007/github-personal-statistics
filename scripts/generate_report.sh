@@ -190,9 +190,9 @@ log "Change counts validated"
 
 log "Fetching PR statistics..."
 # PR情報の取得（ユーザーレベル）
-PR_STATS=$(gh api graphql -f owner="$USERNAME" -f query='
+PR_STATS=$(gh api graphql -f query='
   query($owner: String!) {
-    user(login: $owner) {
+    viewer {
       pullRequests(first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
         nodes {
           createdAt
@@ -202,16 +202,16 @@ PR_STATS=$(gh api graphql -f owner="$USERNAME" -f query='
       }
     }
   }
-')
+' -f owner="$USERNAME")
 
 log "Raw PR Query Response:"
 echo "$PR_STATS" | jq '.'
 
 # PRの統計を計算（期間でフィルタリング）
-DAILY_PRS_CREATED=$(echo "$PR_STATS" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
-DAILY_PRS_MERGED=$(echo "$PR_STATS" | jq --arg from "$FROM_DATE" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
-MONTHLY_PRS_CREATED=$(echo "$PR_STATS" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
-MONTHLY_PRS_MERGED=$(echo "$PR_STATS" | jq --arg from "$MONTH_START" '[.data.user.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
+DAILY_PRS_CREATED=$(echo "$PR_STATS" | jq --arg from "$FROM_DATE" '[.data.viewer.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
+DAILY_PRS_MERGED=$(echo "$PR_STATS" | jq --arg from "$FROM_DATE" '[.data.viewer.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
+MONTHLY_PRS_CREATED=$(echo "$PR_STATS" | jq --arg from "$MONTH_START" '[.data.viewer.pullRequests.nodes[] | select(.createdAt >= $from)] | length')
+MONTHLY_PRS_MERGED=$(echo "$PR_STATS" | jq --arg from "$MONTH_START" '[.data.viewer.pullRequests.nodes[] | select(.mergedAt != null and .mergedAt >= $from)] | length')
 
 log "PR Statistics:"
 log "- Daily PRs Created: $DAILY_PRS_CREATED"
