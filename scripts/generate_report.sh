@@ -193,7 +193,7 @@ fetch_and_sum_code_changes() {
 
   if [[ "$JSON" == *"Resource not accessible by integration"* ]]; then
     log "Error: Permission denied (HTTP 403) accessing repository $owner/$repo"
-    log "Hint: Set GH_PAT with 'repo' and 'read:org' scopes in repository secrets"
+    log "Hint: Set GH_PAT with 'repo' scope in repository secrets"
     return 0
   fi
 
@@ -234,7 +234,7 @@ fetch_and_sum_prs() {
 
   if [[ "$JSON" == *"Resource not accessible by integration"* ]]; then
     log "Error: Permission denied (HTTP 403) accessing repository $owner/$repo"
-    log "Hint: Set GH_PAT with 'repo' and 'read:org' scopes in repository secrets"
+    log "Hint: Set GH_PAT with 'repo' scope in repository secrets"
     return 0
   fi
 
