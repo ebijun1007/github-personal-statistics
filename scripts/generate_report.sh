@@ -8,27 +8,8 @@ log() {
 
 log "Starting GitHub Activity Report script"
 
-# 環境変数の確認
-for var in "GITHUB_TOKEN" "SLACK_WEBHOOK_URL" "USERNAME"; do
-    if [ -z "${!var}" ]; then
-        log "Error: $var is not set"
-        exit 1
-    fi
-    log "Confirmed $var is set"
-done
-
 # リポジトリ情報の設定
 REPO_OWNER="${REPO_OWNER:-$USERNAME}"
-REPO_NAME="${REPO_NAME:-github-personal-statistics}"
-
-# リポジトリ環境変数の確認
-for var in "REPO_OWNER" "REPO_NAME"; do
-    if [ -z "${!var}" ]; then
-        log "Error: $var is not set"
-        exit 1
-    fi
-    log "Confirmed $var is set"
-done
 
 # 月間目標値の確認
 for goal in "MONTHLY_CODE_CHANGES_GOAL" "MONTHLY_PR_CREATION_GOAL" "MONTHLY_PR_MERGE_GOAL"; do
