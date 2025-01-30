@@ -17,8 +17,15 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 # Authenticate GitHub CLI with the token
-echo "$GITHUB_TOKEN" | gh auth login --with-token || {
-  log "Error: Failed to authenticate with GitHub CLI"
+if [ -n "$GITHUB_TOKEN" ]; then
+  echo "$GITHUB_TOKEN" | gh auth login --with-token || {
+    log "Warning: Failed to authenticate with GitHub CLI using GITHUB_TOKEN"
+  }
+fi
+
+# Verify GitHub CLI authentication
+gh auth status || {
+  log "Error: GitHub CLI is not authenticated"
   exit 1
 }
 

@@ -4,11 +4,16 @@ on:
   schedule:
     - cron: '0 9 * * *'
 
-permissions: read-all
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  actions: write
 
 jobs:
   report:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
       
