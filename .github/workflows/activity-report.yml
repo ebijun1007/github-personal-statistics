@@ -1,63 +1,32 @@
 name: GitHub Activity Report
 
 on:
-  schedule:
-    - cron: '0 9 * * *'
-    - cron: '0 21 * * *'
-  push:
-    branches: [ main, master ]
   pull_request:
     types: [ opened, closed ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: read
-  organization-projects: read
-  packages: read
-  deployments: read
+permissions: write-all
 
 jobs:
   report:
     runs-on: ubuntu-latest
     env:
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
       MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
       MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
       USERNAME: ${{ vars.USERNAME }}
-      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-      GH_PAT: ${{ secrets.GH_PAT }}
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       DEBUG: "true"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Debug Environment
+      - name: Basic Setup
         run: |
-          echo "::group::Environment Check"
-          echo "Required Variables:"
-          echo "- MONTHLY_CODE_CHANGES_GOAL exists: ${{ vars.MONTHLY_CODE_CHANGES_GOAL != '' }}"
-          echo "- MONTHLY_PR_CREATION_GOAL exists: ${{ vars.MONTHLY_PR_CREATION_GOAL != '' }}"
-          echo "- MONTHLY_PR_MERGE_GOAL exists: ${{ vars.MONTHLY_PR_MERGE_GOAL != '' }}"
-          echo "Required Secrets:"
-          echo "- GH_PAT exists: ${{ secrets.GH_PAT != '' }}"
-          echo "- SLACK_WEBHOOK_URL exists: ${{ secrets.SLACK_WEBHOOK_URL != '' }}"
-          echo "::endgroup::"
-          
-          echo "::group::Repository Contents"
+          echo "Setting up environment..."
           ls -la
-          echo "::endgroup::"
-          
-          echo "::group::Script Check"
-          if [ -f "./scripts/generate_report.sh" ]; then
-            echo "Script exists"
-            ls -la ./scripts/generate_report.sh
-          else
-            echo "Error: Script not found"
-            exit 1
-          fi
-          echo "::endgroup::"
+          chmod +x ./scripts/generate_report.sh
       
       - name: Install GitHub CLI
         run: |
