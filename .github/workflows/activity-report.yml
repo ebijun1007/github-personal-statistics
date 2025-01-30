@@ -10,13 +10,21 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: read
+  checks: read
+  issues: write
+  deployments: read
+  packages: read
+  repository-projects: read
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+  GH_PAT: ${{ secrets.GH_PAT }}
 
 jobs:
   report:
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-      GH_PAT: ${{ secrets.GH_PAT }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL || '100' }}
       MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL || '10' }}
@@ -24,6 +32,14 @@ jobs:
       USERNAME: ${{ vars.USERNAME || 'ebijun1007' }}
       DEBUG: "true"
     steps:
+      - name: Verify GitHub Token
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "Error: GH_PAT secret is not set"
+            exit 1
+          fi
+          echo "GitHub token is properly configured"
+      
       - uses: actions/checkout@v4
 
       - name: Debug Environment
