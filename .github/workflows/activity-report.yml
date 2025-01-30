@@ -28,18 +28,27 @@ jobs:
 
       - name: Debug Environment
         run: |
-          echo "::group::Environment Setup"
-          echo "Setting up debug mode..."
-          echo "Working Directory: $(pwd)"
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Event: $GITHUB_EVENT_NAME"
-          echo "Actor: $GITHUB_ACTOR"
-          echo "Ref: $GITHUB_REF"
-          echo "SHA: $GITHUB_SHA"
-          echo "Token Status: $([ -n "$GH_PAT" ] && echo "Set" || echo "Not Set")"
-          echo "Webhook Status: $([ -n "$SLACK_WEBHOOK_URL" ] && echo "Set" || echo "Not Set")"
-          ls -la ./scripts/
-          echo "::endgroup::"
+          {
+            echo "::group::Environment Setup"
+            echo "Setting up debug mode..."
+            echo "Working Directory: $(pwd)"
+            echo "Repository: $GITHUB_REPOSITORY"
+            echo "Event: $GITHUB_EVENT_NAME"
+            echo "Actor: $GITHUB_ACTOR"
+            echo "Ref: $GITHUB_REF"
+            echo "SHA: $GITHUB_SHA"
+            echo "Token Status: $([ -n "$GH_PAT" ] && echo "Set" || echo "Not Set")"
+            echo "Webhook Status: $([ -n "$SLACK_WEBHOOK_URL" ] && echo "Set" || echo "Not Set")"
+            echo "Environment Variables:"
+            env | grep -E "MONTHLY_|USERNAME|SLACK_|GITHUB_|GH_" || true
+            echo "Script Permissions:"
+            ls -la ./scripts/
+            echo "GitHub CLI Version:"
+            gh --version || echo "GitHub CLI not found"
+            echo "GitHub Auth Status:"
+            gh auth status || echo "GitHub CLI not authenticated"
+            echo "::endgroup::"
+          } 2>&1 | tee debug.log
       
       - name: Install GitHub CLI
         run: |
