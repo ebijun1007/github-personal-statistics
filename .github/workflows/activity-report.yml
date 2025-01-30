@@ -22,16 +22,17 @@ jobs:
           echo "Repository: $GITHUB_REPOSITORY"
           echo "Event: $GITHUB_EVENT_NAME"
           echo "Actor: $GITHUB_ACTOR"
-          echo "Token: ${{ github.token != '' }}"
+          echo "GH_PAT is set: ${{ secrets.GH_PAT != '' }}"
       
       - name: Run Report Script
         run: |
           chmod +x ./scripts/generate_report.sh
           ./scripts/generate_report.sh
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          MONTHLY_CODE_CHANGES_GOAL: 100
-          MONTHLY_PR_CREATION_GOAL: 10
-          MONTHLY_PR_MERGE_GOAL: 5
-          USERNAME: ebijun1007
+          MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
+          MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
+          MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
+          USERNAME: ${{ vars.USERNAME }}
