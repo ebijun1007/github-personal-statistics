@@ -28,24 +28,28 @@ jobs:
 
       - name: Debug Environment
         run: |
-          echo "::group::Environment Variables"
-          echo "Required Variables:"
-          echo "MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL != '' }}"
-          echo "MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL != '' }}"
-          echo "MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL != '' }}"
-          echo "USERNAME: ${{ vars.USERNAME != '' }}"
-          echo "Required Secrets:"
-          echo "GH_PAT: ${{ secrets.GH_PAT != '' }}"
-          echo "SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL != '' }}"
-          echo "::endgroup::"
+          echo "::group::Environment Setup"
+          echo "Setting up debug mode..."
+          set -x
           
-          echo "::group::Repository Contents"
-          ls -la
-          echo "::endgroup::"
+          echo "Checking GitHub token..."
+          if [ -n "${{ secrets.GH_PAT }}" ]; then
+            echo "GH_PAT is set"
+          else
+            echo "Error: GH_PAT is not set"
+            exit 1
+          fi
           
-          echo "::group::Script Permissions"
+          echo "Checking environment variables..."
+          env | grep -E "MONTHLY_|USERNAME|SLACK_|GITHUB_" || true
+          
+          echo "Checking GitHub CLI..."
+          gh --version || echo "GitHub CLI not found"
+          gh auth status || echo "GitHub CLI not authenticated"
+          
+          echo "Checking script permissions..."
+          ls -la ./scripts/
           chmod +x ./scripts/generate_report.sh
-          ls -la ./scripts/generate_report.sh
           echo "::endgroup::"
       
       - name: Install GitHub CLI
