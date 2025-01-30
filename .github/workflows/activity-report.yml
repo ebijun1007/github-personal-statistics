@@ -1,14 +1,19 @@
 name: GitHub Activity Report
 
 on:
- schedule:
-    - cron: '0 9 * * *'   # 6 PM JST
-    - cron: '0 21 * * *'  # 6 AM JST
- push:
-   branches: [ main, master ]
- pull_request:
-   types: [ opened, closed ]
- workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * *'
+    - cron: '0 21 * * *'
+  push:
+    branches: [ main, master ]
+  pull_request:
+    types: [ opened, closed ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  organization: read
 
 env:
   MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
@@ -18,7 +23,6 @@ env:
 
 jobs:
   report:
-    # 個人の活動のみを対象とする
     if: github.actor == vars.USERNAME
     runs-on: ubuntu-latest
     steps:
