@@ -35,8 +35,9 @@ jobs:
       - name: Generate Activity Report
         run: |
           chmod +x ./scripts/generate_report.sh
-          GITHUB_TOKEN=${{ secrets.GITHUB_PAT }} ./scripts/generate_report.sh
+          ./scripts/generate_report.sh
         env:
-          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_PAT }}
+          GH_PAT: ${{ secrets.GITHUB_PAT }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DEBUG: ${{ vars.DEBUG || 'false' }}
