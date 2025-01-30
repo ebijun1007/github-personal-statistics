@@ -69,16 +69,10 @@ jobs:
       - name: Setup GitHub CLI and Test Authentication
         run: |
           echo "::group::GitHub Authentication"
-          if [ -n "${{ secrets.GH_PAT }}" ]; then
-            echo "GH_PAT is set"
-            echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
-            echo "Testing GitHub CLI authentication..."
-            gh auth status || echo "GitHub CLI authentication failed"
-            gh api user || echo "Failed to access GitHub API"
-          else
-            echo "Error: GH_PAT is not set"
-            exit 1
-          fi
+          echo "${{ github.token }}" | gh auth login --with-token
+          echo "Testing GitHub CLI authentication..."
+          gh auth status || echo "GitHub CLI authentication failed"
+          gh api user || echo "Failed to access GitHub API"
           echo "::endgroup::"
       
       - name: Install dependencies

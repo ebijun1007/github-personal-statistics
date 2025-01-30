@@ -11,13 +11,16 @@ log "Starting GitHub Activity Report script"
 #------------------------------------------------------
 # 1. 前提チェック
 #------------------------------------------------------
-if [ -n "$GH_PAT" ]; then
-  log "Using GH_PAT instead of GITHUB_TOKEN for enhanced permissions"
-  export GITHUB_TOKEN="$GH_PAT"
-elif [ -z "$GITHUB_TOKEN" ]; then
-  log "Error: Neither GITHUB_TOKEN nor GH_PAT is set."
+if [ -z "$GITHUB_TOKEN" ]; then
+  log "Error: GITHUB_TOKEN is not set."
   exit 1
 fi
+
+# Authenticate GitHub CLI with the token
+echo "$GITHUB_TOKEN" | gh auth login --with-token || {
+  log "Error: Failed to authenticate with GitHub CLI"
+  exit 1
+}
 
 if [ -z "$SLACK_WEBHOOK_URL" ]; then
   log "Error: SLACK_WEBHOOK_URL is not set."
