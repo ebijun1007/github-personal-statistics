@@ -11,8 +11,16 @@ log "Starting GitHub Activity Report script"
 #------------------------------------------------------
 # 1. 前提チェック
 #------------------------------------------------------
-if [ -z "$GITHUB_TOKEN" ] || [ -z "$SLACK_WEBHOOK_URL" ]; then
-  log "Error: GITHUB_TOKEN or SLACK_WEBHOOK_URL is not set."
+if [ -n "$GH_PAT" ]; then
+  log "Using GH_PAT instead of GITHUB_TOKEN for enhanced permissions"
+  export GITHUB_TOKEN="$GH_PAT"
+elif [ -z "$GITHUB_TOKEN" ]; then
+  log "Error: Neither GITHUB_TOKEN nor GH_PAT is set."
+  exit 1
+fi
+
+if [ -z "$SLACK_WEBHOOK_URL" ]; then
+  log "Error: SLACK_WEBHOOK_URL is not set."
   exit 1
 fi
 
@@ -230,7 +238,13 @@ fetch_and_sum_code_changes() {
     -F dailyFrom="$dailyFrom" \
     -F monthlyFrom="$monthlyFrom" \
     -F userId="$USER_ID" \
-    -f query="$commits_query" 2>/dev/null || echo "")
+    -f query="$commits_query" 2>&1 || echo "")
+
+  if [[ "$JSON" == *"Resource not accessible by integration"* ]]; then
+    log "Error: Permission denied (HTTP 403) accessing repository $owner/$repo"
+    log "Hint: Set GH_PAT with 'repo' and 'read:org' scopes in repository secrets"
+    return 0
+  fi
 
   # daily
   local daily_total=$(echo "$JSON" | jq '[.data.daily.defaultBranchRef?.target.history.nodes[]? | (.additions + .deletions)] | add // 0')
@@ -286,7 +300,13 @@ fetch_and_sum_prs() {
     -F owner="$owner" \
     -F repo="$repo" \
     -F userId="$USER_ID" \
-    -f query="$pr_query" 2>/dev/null || echo "")
+    -f query="$pr_query" 2>&1 || echo "")
+
+  if [[ "$JSON" == *"Resource not accessible by integration"* ]]; then
+    log "Error: Permission denied (HTTP 403) accessing repository $owner/$repo"
+    log "Hint: Set GH_PAT with 'repo' and 'read:org' scopes in repository secrets"
+    return 0
+  fi
 
   local daily_created=$(echo "$JSON" | jq --arg from "$dailyFrom" '[.data.repository.pullRequests.nodes[]? | select(.createdAt >= $from)] | length')
   local daily_merged=$(echo "$JSON" | jq --arg from "$dailyFrom" '[.data.repository.pullRequests.nodes[]? | select(.mergedAt != null and .mergedAt >= $from)] | length')
