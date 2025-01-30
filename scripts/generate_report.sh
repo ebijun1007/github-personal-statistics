@@ -185,7 +185,6 @@ fetch_and_sum_code_changes() {
         }
       }
     }'
-  fi
 
   local JSON=$(gh api graphql \
     -F owner="$owner" \
@@ -228,7 +227,6 @@ fetch_and_sum_prs() {
         }
       }
     }'
-  fi
 
   local JSON=$(gh api graphql \
     -F owner="$owner" \

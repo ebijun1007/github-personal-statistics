@@ -3,6 +3,9 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 9 * * *'
+  pull_request:
+    branches: [ master ]
+    types: [ opened, synchronize, reopened ]
 
 permissions:
   contents: write
@@ -13,7 +16,7 @@ permissions:
 jobs:
   report:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
       
