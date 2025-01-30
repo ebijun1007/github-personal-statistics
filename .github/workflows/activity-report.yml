@@ -28,7 +28,16 @@ jobs:
       USERNAME: ${{ vars.USERNAME }}
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GH_PAT: ${{ secrets.GH_PAT }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      DEBUG: "true"
     steps:
+      - name: Debug Environment
+        run: |
+          echo "Checking environment variables (values redacted):"
+          env | grep -E 'MONTHLY_|USERNAME|DEBUG' || true
+          echo "GH_PAT set: ${{ secrets.GH_PAT != '' }}"
+          echo "SLACK_WEBHOOK_URL set: ${{ secrets.SLACK_WEBHOOK_URL != '' }}"
+      
       - uses: actions/checkout@v4
       
       - name: Install GitHub CLI
@@ -51,8 +60,3 @@ jobs:
         run: |
           chmod +x ./scripts/generate_report.sh
           ./scripts/generate_report.sh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          DEBUG: ${{ vars.DEBUG || 'false' }}
