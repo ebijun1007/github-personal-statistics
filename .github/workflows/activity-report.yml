@@ -1,11 +1,15 @@
 name: GitHub Activity Report
 
 on:
+  schedule:
+    - cron: '0 9 * * *'
   pull_request:
     types: [ opened, closed ]
   workflow_dispatch:
 
-permissions: write-all
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   report:
@@ -14,32 +18,28 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GH_PAT: ${{ secrets.GH_PAT }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      MONTHLY_CODE_CHANGES_GOAL: '100'
-      MONTHLY_PR_CREATION_GOAL: '10'
-      MONTHLY_PR_MERGE_GOAL: '5'
-      USERNAME: 'ebijun1007'
+      MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL || '100' }}
+      MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL || '10' }}
+      MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL || '5' }}
+      USERNAME: ${{ vars.USERNAME || 'ebijun1007' }}
       DEBUG: "true"
-    outputs:
-      debug_info: ${{ steps.debug.outputs.debug_info }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Debug Environment
-        id: debug
         run: |
-          {
-            echo "Debug Information:"
-            echo "Working Directory: $(pwd)"
-            echo "Repository: $GITHUB_REPOSITORY"
-            echo "Event: $GITHUB_EVENT_NAME"
-            echo "Actor: $GITHUB_ACTOR"
-            echo "Ref: $GITHUB_REF"
-            echo "SHA: $GITHUB_SHA"
-            echo "Token Status: $([ -n "$GH_PAT" ] && echo "Set" || echo "Not Set")"
-            echo "Webhook Status: $([ -n "$SLACK_WEBHOOK_URL" ] && echo "Set" || echo "Not Set")"
-            ls -la
-          } 2>&1 | tee debug.log
-          echo "debug_info=$(cat debug.log)" >> $GITHUB_OUTPUT
+          echo "::group::Environment Setup"
+          echo "Setting up debug mode..."
+          echo "Working Directory: $(pwd)"
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "Actor: $GITHUB_ACTOR"
+          echo "Ref: $GITHUB_REF"
+          echo "SHA: $GITHUB_SHA"
+          echo "Token Status: $([ -n "$GH_PAT" ] && echo "Set" || echo "Not Set")"
+          echo "Webhook Status: $([ -n "$SLACK_WEBHOOK_URL" ] && echo "Set" || echo "Not Set")"
+          ls -la ./scripts/
+          echo "::endgroup::"
       
       - name: Install GitHub CLI
         run: |
