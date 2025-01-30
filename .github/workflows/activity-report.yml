@@ -33,10 +33,23 @@ jobs:
     steps:
       - name: Debug Environment
         run: |
-          echo "Checking environment variables (values redacted):"
-          env | grep -E 'MONTHLY_|USERNAME|DEBUG' || true
-          echo "GH_PAT set: ${{ secrets.GH_PAT != '' }}"
-          echo "SLACK_WEBHOOK_URL set: ${{ secrets.SLACK_WEBHOOK_URL != '' }}"
+          echo "::group::Environment Check"
+          echo "Required Variables:"
+          echo "- MONTHLY_CODE_CHANGES_GOAL exists: ${{ vars.MONTHLY_CODE_CHANGES_GOAL != '' }}"
+          echo "- MONTHLY_PR_CREATION_GOAL exists: ${{ vars.MONTHLY_PR_CREATION_GOAL != '' }}"
+          echo "- MONTHLY_PR_MERGE_GOAL exists: ${{ vars.MONTHLY_PR_MERGE_GOAL != '' }}"
+          echo "Required Secrets:"
+          echo "- GH_PAT exists: ${{ secrets.GH_PAT != '' }}"
+          echo "- SLACK_WEBHOOK_URL exists: ${{ secrets.SLACK_WEBHOOK_URL != '' }}"
+          echo "::endgroup::"
+          
+          echo "::group::GitHub CLI Check"
+          gh --version || echo "GitHub CLI not found"
+          echo "::endgroup::"
+          
+          echo "::group::File Permissions"
+          ls -la ./scripts/generate_report.sh || echo "Script not found"
+          echo "::endgroup::"
       
       - uses: actions/checkout@v4
       
