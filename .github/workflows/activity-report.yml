@@ -26,17 +26,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup GitHub CLI with PAT
-        run: |
-          echo "${{ secrets.GITHUB_PAT }}" | gh auth login --with-token
+      - name: Install GitHub CLI
+        run: sudo apt-get update && sudo apt-get install -y gh
       
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y jq bc
+        run: sudo apt-get install -y jq bc
       
       - name: Generate Activity Report
         run: |
           chmod +x ./scripts/generate_report.sh
-          ./scripts/generate_report.sh
+          GITHUB_TOKEN=${{ secrets.GITHUB_PAT }} ./scripts/generate_report.sh
         env:
           GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
