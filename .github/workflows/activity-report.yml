@@ -12,6 +12,11 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+  issues: read
+  organization-projects: read
+  packages: read
+  deployments: read
 
 env:
   MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
@@ -37,7 +42,6 @@ jobs:
           chmod +x ./scripts/generate_report.sh
           ./scripts/generate_report.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_PAT }}
-          GH_PAT: ${{ secrets.GITHUB_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DEBUG: ${{ vars.DEBUG || 'false' }}
