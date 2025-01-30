@@ -5,7 +5,11 @@ on:
     types: [ opened, closed ]
   workflow_dispatch:
 
-permissions: write-all
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+  actions: read
 
 jobs:
   report:
@@ -14,10 +18,10 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GH_PAT: ${{ secrets.GH_PAT }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
-      MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
-      MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
-      USERNAME: ${{ vars.USERNAME }}
+      MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL || '100' }}
+      MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL || '10' }}
+      MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL || '5' }}
+      USERNAME: ${{ vars.USERNAME || 'ebijun1007' }}
       DEBUG: "true"
     steps:
       - uses: actions/checkout@v4
