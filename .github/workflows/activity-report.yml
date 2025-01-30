@@ -18,17 +18,16 @@ permissions:
   packages: read
   deployments: read
 
-env:
-  MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
-  MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
-  MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
-  USERNAME: ${{ vars.USERNAME }}
-  GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-  GH_PAT: ${{ secrets.GH_PAT }}
-
 jobs:
   report:
     runs-on: ubuntu-latest
+    env:
+      MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
+      MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
+      MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
+      USERNAME: ${{ vars.USERNAME }}
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      GH_PAT: ${{ secrets.GH_PAT }}
     steps:
       - uses: actions/checkout@v4
       
