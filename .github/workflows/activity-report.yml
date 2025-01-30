@@ -31,6 +31,8 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       DEBUG: "true"
     steps:
+      - uses: actions/checkout@v4
+
       - name: Debug Environment
         run: |
           echo "::group::Environment Check"
@@ -43,15 +45,19 @@ jobs:
           echo "- SLACK_WEBHOOK_URL exists: ${{ secrets.SLACK_WEBHOOK_URL != '' }}"
           echo "::endgroup::"
           
-          echo "::group::GitHub CLI Check"
-          gh --version || echo "GitHub CLI not found"
+          echo "::group::Repository Contents"
+          ls -la
           echo "::endgroup::"
           
-          echo "::group::File Permissions"
-          ls -la ./scripts/generate_report.sh || echo "Script not found"
+          echo "::group::Script Check"
+          if [ -f "./scripts/generate_report.sh" ]; then
+            echo "Script exists"
+            ls -la ./scripts/generate_report.sh
+          else
+            echo "Error: Script not found"
+            exit 1
+          fi
           echo "::endgroup::"
-      
-      - uses: actions/checkout@v4
       
       - name: Install GitHub CLI
         run: |
