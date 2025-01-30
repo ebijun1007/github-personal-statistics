@@ -11,15 +11,18 @@ log "Starting GitHub Activity Report script"
 #------------------------------------------------------
 # 1. 前提チェック
 #------------------------------------------------------
-if [ -z "$GITHUB_TOKEN" ]; then
-  log "Error: GITHUB_TOKEN is not set."
+if [ -n "$GH_PAT" ]; then
+  log "Using GH_PAT instead of GITHUB_TOKEN for enhanced permissions"
+  export GITHUB_TOKEN="$GH_PAT"
+elif [ -z "$GITHUB_TOKEN" ]; then
+  log "Error: Neither GITHUB_TOKEN nor GH_PAT is set."
   exit 1
 fi
 
 # Authenticate GitHub CLI with the token
 if [ -n "$GITHUB_TOKEN" ]; then
   echo "$GITHUB_TOKEN" | gh auth login --with-token || {
-    log "Warning: Failed to authenticate with GitHub CLI using GITHUB_TOKEN"
+    log "Warning: Failed to authenticate with GitHub CLI using token"
   }
 fi
 
