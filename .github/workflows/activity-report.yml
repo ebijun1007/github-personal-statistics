@@ -22,11 +22,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Basic Setup
+      - name: Debug Environment
         run: |
-          echo "Setting up environment..."
+          echo "::group::Environment Variables"
+          echo "Required Variables:"
+          echo "MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL != '' }}"
+          echo "MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL != '' }}"
+          echo "MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL != '' }}"
+          echo "USERNAME: ${{ vars.USERNAME != '' }}"
+          echo "Required Secrets:"
+          echo "GH_PAT: ${{ secrets.GH_PAT != '' }}"
+          echo "SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL != '' }}"
+          echo "::endgroup::"
+          
+          echo "::group::Repository Contents"
           ls -la
+          echo "::endgroup::"
+          
+          echo "::group::Script Permissions"
           chmod +x ./scripts/generate_report.sh
+          ls -la ./scripts/generate_report.sh
+          echo "::endgroup::"
       
       - name: Install GitHub CLI
         run: |
