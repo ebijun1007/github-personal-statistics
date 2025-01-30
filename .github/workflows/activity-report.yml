@@ -59,14 +59,35 @@ jobs:
           && sudo apt-get update \
           && sudo apt-get install gh -y
       
-      - name: Setup GitHub CLI
+      - name: Setup GitHub CLI and Test Authentication
         run: |
-          echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
+          echo "::group::GitHub Authentication"
+          if [ -n "${{ secrets.GH_PAT }}" ]; then
+            echo "GH_PAT is set"
+            echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
+            echo "Testing GitHub CLI authentication..."
+            gh auth status || echo "GitHub CLI authentication failed"
+            gh api user || echo "Failed to access GitHub API"
+          else
+            echo "Error: GH_PAT is not set"
+            exit 1
+          fi
+          echo "::endgroup::"
       
       - name: Install dependencies
-        run: sudo apt-get install -y jq bc
+        run: |
+          echo "::group::Installing Dependencies"
+          sudo apt-get update
+          sudo apt-get install -y jq bc
+          echo "::endgroup::"
       
       - name: Generate Activity Report
         run: |
+          echo "::group::Activity Report Generation"
+          echo "Setting execute permissions..."
           chmod +x ./scripts/generate_report.sh
+          echo "Script permissions:"
+          ls -la ./scripts/generate_report.sh
+          echo "Running script..."
           ./scripts/generate_report.sh
+          echo "::endgroup::"
