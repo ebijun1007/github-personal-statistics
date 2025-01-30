@@ -5,15 +5,13 @@ on:
     types: [ opened, closed ]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: write-all
 
 jobs:
   report:
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
       GH_PAT: ${{ secrets.GH_PAT }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       MONTHLY_CODE_CHANGES_GOAL: '100'
@@ -21,34 +19,27 @@ jobs:
       MONTHLY_PR_MERGE_GOAL: '5'
       USERNAME: 'ebijun1007'
       DEBUG: "true"
+    outputs:
+      debug_info: ${{ steps.debug.outputs.debug_info }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Debug Environment
+        id: debug
         run: |
-          echo "::group::Environment Setup"
-          echo "Setting up debug mode..."
-          set -x
-          
-          echo "Checking GitHub token..."
-          if [ -n "${{ secrets.GH_PAT }}" ]; then
-            echo "GH_PAT is set"
-          else
-            echo "Error: GH_PAT is not set"
-            exit 1
-          fi
-          
-          echo "Checking environment variables..."
-          env | grep -E "MONTHLY_|USERNAME|SLACK_|GITHUB_" || true
-          
-          echo "Checking GitHub CLI..."
-          gh --version || echo "GitHub CLI not found"
-          gh auth status || echo "GitHub CLI not authenticated"
-          
-          echo "Checking script permissions..."
-          ls -la ./scripts/
-          chmod +x ./scripts/generate_report.sh
-          echo "::endgroup::"
+          {
+            echo "Debug Information:"
+            echo "Working Directory: $(pwd)"
+            echo "Repository: $GITHUB_REPOSITORY"
+            echo "Event: $GITHUB_EVENT_NAME"
+            echo "Actor: $GITHUB_ACTOR"
+            echo "Ref: $GITHUB_REF"
+            echo "SHA: $GITHUB_SHA"
+            echo "Token Status: $([ -n "$GH_PAT" ] && echo "Set" || echo "Not Set")"
+            echo "Webhook Status: $([ -n "$SLACK_WEBHOOK_URL" ] && echo "Set" || echo "Not Set")"
+            ls -la
+          } 2>&1 | tee debug.log
+          echo "debug_info=$(cat debug.log)" >> $GITHUB_OUTPUT
       
       - name: Install GitHub CLI
         run: |
