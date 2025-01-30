@@ -1,0 +1,23 @@
+name: GitHub Statistics Report
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Run daily at 9 AM UTC
+  workflow_dispatch:      # Allow manual triggers
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Generate Activity Report
+        run: |
+          chmod +x ./scripts/generate_report.sh
+          ./scripts/generate_report.sh
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
+          MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
+          MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
+          USERNAME: ${{ vars.USERNAME }}
