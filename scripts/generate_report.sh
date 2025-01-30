@@ -114,25 +114,7 @@ USER_ID=$(gh api user --jq '.id')
 log "User ID: $USER_ID"
 
 #------------------------------------------------------
-# 4. オーガニゼーション取得
-#------------------------------------------------------
-ORGS_JSON=$(gh api graphql -f query='
-  query($user: String!) {
-    user(login: $user) {
-      organizations(first: 100) {
-        nodes {
-          login
-        }
-      }
-    }
-  }
-' -f user="$USERNAME")
-
-ORG_LIST=$(echo "$ORGS_JSON" | jq -r '.data.user.organizations.nodes[].login')
-log "Organizations found: $ORG_LIST"
-
-#------------------------------------------------------
-# 5. 自分の個人リポジトリ一覧（owner=USERNAME）取得
+# 4. 自分の個人リポジトリ一覧（owner=USERNAME）取得
 #------------------------------------------------------
 # リポジトリ数が多い場合はpaginateが必要な場合もあります
 USER_REPOS_JSON=$(gh api graphql -f query='
@@ -163,83 +145,43 @@ TOTAL_MONTHLY_PRS_MERGED=0
 #------------------------------------------------------
 # 6. 変更行数集計用関数
 #------------------------------------------------------
-# personal_repo=true なら全コミット対象
-# personal_repo=false なら authorに自分だけ絞る
 fetch_and_sum_code_changes() {
   local owner="$1"
   local repo="$2"
   local dailyFrom="$3"
   local monthlyFrom="$4"
-  local personal_repo="$5"   # true/false
 
-  if [ "$personal_repo" == "true" ]; then
-    # 全コミット対象
-    local commits_query='
-      query($owner: String!, $repo: String!, $dailyFrom: GitTimestamp!, $monthlyFrom: GitTimestamp!) {
-        daily: repository(owner: $owner, name: $repo) {
-          defaultBranchRef {
-            target {
-              ... on Commit {
-                history(first: 100, since: $dailyFrom) {
-                  nodes {
-                    additions
-                    deletions
-                  }
-                }
-              }
-            }
-          }
-        }
-        monthly: repository(owner: $owner, name: $repo) {
-          defaultBranchRef {
-            target {
-              ... on Commit {
-                history(first: 100, since: $monthlyFrom) {
-                  nodes {
-                    additions
-                    deletions
-                  }
+  local commits_query='
+    query($owner: String!, $repo: String!, $dailyFrom: GitTimestamp!, $monthlyFrom: GitTimestamp!) {
+      daily: repository(owner: $owner, name: $repo) {
+        defaultBranchRef {
+          target {
+            ... on Commit {
+              history(first: 100, since: $dailyFrom) {
+                nodes {
+                  additions
+                  deletions
                 }
               }
             }
           }
         }
       }
-    '
-  else
-    # 自分がauthorのコミットのみ対象
-    local commits_query='
-      query($owner: String!, $repo: String!, $dailyFrom: GitTimestamp!, $monthlyFrom: GitTimestamp!, $userId: ID!) {
-        daily: repository(owner: $owner, name: $repo) {
-          defaultBranchRef {
-            target {
-              ... on Commit {
-                history(first: 100, since: $dailyFrom, author: {id: $userId}) {
-                  nodes {
-                    additions
-                    deletions
-                  }
-                }
-              }
-            }
-          }
-        }
-        monthly: repository(owner: $owner, name: $repo) {
-          defaultBranchRef {
-            target {
-              ... on Commit {
-                history(first: 100, since: $monthlyFrom, author: {id: $userId}) {
-                  nodes {
-                    additions
-                    deletions
-                  }
+      monthly: repository(owner: $owner, name: $repo) {
+        defaultBranchRef {
+          target {
+            ... on Commit {
+              history(first: 100, since: $monthlyFrom) {
+                nodes {
+                  additions
+                  deletions
                 }
               }
             }
           }
         }
       }
-    '
+    }'
   fi
 
   local JSON=$(gh api graphql \
@@ -247,7 +189,6 @@ fetch_and_sum_code_changes() {
     -F repo="$repo" \
     -F dailyFrom="$dailyFrom" \
     -F monthlyFrom="$monthlyFrom" \
-    -F userId="$USER_ID" \
     -f query="$commits_query" 2>&1 || echo "")
 
   if [[ "$JSON" == *"Resource not accessible by integration"* ]]; then
@@ -267,49 +208,28 @@ fetch_and_sum_code_changes() {
 #------------------------------------------------------
 # 7. PR数集計用関数
 #------------------------------------------------------
-# personal_repo=true なら全PR対象
-# personal_repo=false なら authorに自分だけ絞る
 fetch_and_sum_prs() {
   local owner="$1"
   local repo="$2"
   local dailyFrom="$3"
   local monthlyFrom="$4"
-  local personal_repo="$5"   # true/false
 
-  if [ "$personal_repo" == "true" ]; then
-    # 全PR対象
-    local pr_query='
-      query($owner: String!, $repo: String!) {
-        repository(owner: $owner, name: $repo) {
-          pullRequests(first: 100, states: [OPEN, CLOSED, MERGED], orderBy: {field: CREATED_AT, direction: DESC}) {
-            nodes {
-              createdAt
-              mergedAt
-            }
+  local pr_query='
+    query($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequests(first: 100, states: [OPEN, CLOSED, MERGED], orderBy: {field: CREATED_AT, direction: DESC}) {
+          nodes {
+            createdAt
+            mergedAt
           }
         }
       }
-    '
-  else
-    # 自分のPRだけ
-    local pr_query='
-      query($owner: String!, $repo: String!, $userId: ID!) {
-        repository(owner: $owner, name: $repo) {
-          pullRequests(first: 100, states: [OPEN, CLOSED, MERGED], orderBy: {field: CREATED_AT, direction: DESC}, filterBy: {headAuthorId: $userId}) {
-            nodes {
-              createdAt
-              mergedAt
-            }
-          }
-        }
-      }
-    '
+    }'
   fi
 
   local JSON=$(gh api graphql \
     -F owner="$owner" \
     -F repo="$repo" \
-    -F userId="$USER_ID" \
     -f query="$pr_query" 2>&1 || echo "")
 
   if [[ "$JSON" == *"Resource not accessible by integration"* ]]; then
@@ -327,61 +247,23 @@ fetch_and_sum_prs() {
 }
 
 #------------------------------------------------------
-# 8. 個人リポジトリ集計（作業者問わず全コミット・全PR）
+# 8. リポジトリ集計
 #------------------------------------------------------
 for repo in $USER_REPOS
 do
-  changes_csv=$(fetch_and_sum_code_changes "$USERNAME" "$repo" "$FROM_DATE" "$MONTH_START" "true")
+  changes_csv=$(fetch_and_sum_code_changes "$USERNAME" "$repo" "$FROM_DATE" "$MONTH_START")
   IFS=',' read -r dC mC <<< "$changes_csv"
 
   TOTAL_DAILY_CHANGES=$((TOTAL_DAILY_CHANGES + dC))
   TOTAL_MONTHLY_CHANGES=$((TOTAL_MONTHLY_CHANGES + mC))
 
-  prs_csv=$(fetch_and_sum_prs "$USERNAME" "$repo" "$FROM_DATE" "$MONTH_START" "true")
+  prs_csv=$(fetch_and_sum_prs "$USERNAME" "$repo" "$FROM_DATE" "$MONTH_START")
   IFS=',' read -r dPRC dPRM mPRC mPRM <<< "$prs_csv"
 
   TOTAL_DAILY_PRS_CREATED=$((TOTAL_DAILY_PRS_CREATED + dPRC))
   TOTAL_DAILY_PRS_MERGED=$((TOTAL_DAILY_PRS_MERGED + dPRM))
   TOTAL_MONTHLY_PRS_CREATED=$((TOTAL_MONTHLY_PRS_CREATED + mPRC))
   TOTAL_MONTHLY_PRS_MERGED=$((TOTAL_MONTHLY_PRS_MERGED + mPRM))
-done
-
-#------------------------------------------------------
-# 9. オーガニゼーションリポジトリ集計（ebijun1007のみ対象）
-#------------------------------------------------------
-# すべてのオーガニゼーションを走査し、リポジトリを取得
-for org in $ORG_LIST
-do
-  ORG_REPOS_JSON=$(gh api graphql -f query='
-    query($org: String!) {
-      organization(login: $org) {
-        repositories(first: 100, ownerAffiliations: OWNER, isFork: false) {
-          nodes {
-            name
-          }
-        }
-      }
-    }
-  ' -F org="$org")
-
-  ORG_REPOS=$(echo "$ORG_REPOS_JSON" | jq -r '.data.organization.repositories.nodes[].name // empty')
-
-  for repo in $ORG_REPOS
-  do
-    changes_csv=$(fetch_and_sum_code_changes "$org" "$repo" "$FROM_DATE" "$MONTH_START" "false")
-    IFS=',' read -r dC mC <<< "$changes_csv"
-
-    TOTAL_DAILY_CHANGES=$((TOTAL_DAILY_CHANGES + dC))
-    TOTAL_MONTHLY_CHANGES=$((TOTAL_MONTHLY_CHANGES + mC))
-
-    prs_csv=$(fetch_and_sum_prs "$org" "$repo" "$FROM_DATE" "$MONTH_START" "false")
-    IFS=',' read -r dPRC dPRM mPRC mPRM <<< "$prs_csv"
-
-    TOTAL_DAILY_PRS_CREATED=$((TOTAL_DAILY_PRS_CREATED + dPRC))
-    TOTAL_DAILY_PRS_MERGED=$((TOTAL_DAILY_PRS_MERGED + dPRM))
-    TOTAL_MONTHLY_PRS_CREATED=$((TOTAL_MONTHLY_PRS_CREATED + mPRC))
-    TOTAL_MONTHLY_PRS_MERGED=$((TOTAL_MONTHLY_PRS_MERGED + mPRM))
-  done
 done
 
 #------------------------------------------------------
