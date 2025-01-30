@@ -12,10 +12,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  organization-projects: read
-  organization-packages: read
-  metadata: read
 
 env:
   MONTHLY_CODE_CHANGES_GOAL: ${{ vars.MONTHLY_CODE_CHANGES_GOAL }}
@@ -30,9 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup GitHub CLI
+      - name: Setup GitHub CLI with PAT
         run: |
-          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+          echo "${{ secrets.GITHUB_PAT }}" | gh auth login --with-token
       
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y jq bc
@@ -42,6 +38,6 @@ jobs:
           chmod +x ./scripts/generate_report.sh
           ./scripts/generate_report.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DEBUG: ${{ vars.DEBUG || 'false' }}
