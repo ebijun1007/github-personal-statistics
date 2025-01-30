@@ -23,10 +23,11 @@ env:
   MONTHLY_PR_CREATION_GOAL: ${{ vars.MONTHLY_PR_CREATION_GOAL }}
   MONTHLY_PR_MERGE_GOAL: ${{ vars.MONTHLY_PR_MERGE_GOAL }}
   USERNAME: ${{ vars.USERNAME }}
+  GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+  GH_PAT: ${{ secrets.GH_PAT }}
 
 jobs:
   report:
-    if: github.actor == ${{ vars.USERNAME }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
