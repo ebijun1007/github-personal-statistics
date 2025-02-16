@@ -248,7 +248,25 @@ fetch_and_sum_prs() {
 }
 
 #------------------------------------------------------
-# 8. リポジトリ集計
+# 8. オーガニゼーション一覧取得
+#------------------------------------------------------
+ORGS_JSON=$(gh api graphql -f query='
+  query($user: String!) {
+    user(login: $user) {
+      organizations(first: 100) {
+        nodes {
+          login
+        }
+      }
+    }
+  }
+' -f user="$USERNAME")
+
+ORG_LIST=$(echo "$ORGS_JSON" | jq -r '.data.user.organizations.nodes[].login')
+log "Organizations found: $ORG_LIST"
+
+#------------------------------------------------------
+# 9. 個人リポジトリ集計
 #------------------------------------------------------
 for repo in $USER_REPOS
 do
@@ -268,7 +286,45 @@ do
 done
 
 #------------------------------------------------------
-# 10. 目標に対する進捗率計算
+# 10. オーガニゼーションリポジトリ集計
+#------------------------------------------------------
+# すべてのオーガニゼーションを走査し、リポジトリを取得
+for org in $ORG_LIST
+do
+  ORG_REPOS_JSON=$(gh api graphql -f query='
+    query($org: String!) {
+      organization(login: $org) {
+        repositories(first: 100, ownerAffiliations: OWNER, isFork: false) {
+          nodes {
+            name
+          }
+        }
+      }
+    }
+  ' -F org="$org")
+
+  ORG_REPOS=$(echo "$ORG_REPOS_JSON" | jq -r '.data.organization.repositories.nodes[].name // empty')
+
+  for repo in $ORG_REPOS
+  do
+    changes_csv=$(fetch_and_sum_code_changes "$org" "$repo" "$FROM_DATE" "$MONTH_START")
+    IFS=',' read -r dC mC <<< "$changes_csv"
+
+    TOTAL_DAILY_CHANGES=$((TOTAL_DAILY_CHANGES + dC))
+    TOTAL_MONTHLY_CHANGES=$((TOTAL_MONTHLY_CHANGES + mC))
+
+    prs_csv=$(fetch_and_sum_prs "$org" "$repo" "$FROM_DATE" "$MONTH_START")
+    IFS=',' read -r dPRC dPRM mPRC mPRM <<< "$prs_csv"
+
+    TOTAL_DAILY_PRS_CREATED=$((TOTAL_DAILY_PRS_CREATED + dPRC))
+    TOTAL_DAILY_PRS_MERGED=$((TOTAL_DAILY_PRS_MERGED + dPRM))
+    TOTAL_MONTHLY_PRS_CREATED=$((TOTAL_MONTHLY_PRS_CREATED + mPRC))
+    TOTAL_MONTHLY_PRS_MERGED=$((TOTAL_MONTHLY_PRS_MERGED + mPRM))
+  done
+done
+
+#------------------------------------------------------
+# 11. 目標に対する進捗率計算
 #------------------------------------------------------
 if ! command -v bc &>/dev/null; then
   log "Error: bc command not found"
